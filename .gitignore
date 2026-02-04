@@ -1,0 +1,24 @@
+# Dependencies
+node_modules
+*.log
+.eslintcache
+
+# Output directory
+dist
+.vite
+
+# Environment variables
+.env
+.env.*.local
+
+# IDE-specific configuration
+.idea
+.vscode/*
+!/.vscode/settings.json
+!/.vscode/tasks.json
+!/.vscode/launch.json
+!/.vscode/extensions.json
+
+# OS-specific files
+.DS_Store
+Thumbs.db
