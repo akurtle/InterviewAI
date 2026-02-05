@@ -7,6 +7,7 @@ interface UploadProps {
   setCurrentStep: Dispatch<SetStateAction<StepType>>
   setSelectedOption: Dispatch<SetStateAction<"interview" | "resume" | null>>
   setUploadedFile: (file: File | null) => void;
+  uploadedFilePath: string | undefined;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleAnalyze: () => void;
 }

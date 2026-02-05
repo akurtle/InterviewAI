@@ -1,45 +1,74 @@
+import tempfile
 import pdfplumber
 from docx import Document
 import io
 import re
 from typing import Dict, Any
 import spacy
+from pyresparser import ResumeParser as PyResumeParser
+import nltk
+
+import os
 
 class ResumeParser:
     def __init__(self):
         # Load spaCy model
         try:
             self.nlp = spacy.load("en_core_web_sm")
+            
         except:
             print("Downloading spaCy model...")
             import os
             os.system("python -m spacy download en_core_web_sm")
             self.nlp = spacy.load("en_core_web_sm")
     
-    def parse(self, file_content: bytes, filename: str) -> Dict[str, Any]:
+    def parse(self, file_content: bytes, filename: str, filepath:str) -> Dict[str, Any]:
         """
         Main parsing method
         """
         # Extract text
-        text = self._extract_text(file_content, filename)
+        # text = self._extract_text(file_content, filename)
         
-        # Parse information
-        parsed_data = {
-            "name": self._extract_name(text),
-            "email": self._extract_email(text),
-            "phone": self._extract_phone(text),
-            "skills": self._extract_skills(text),
-            "education": self._extract_education(text),
-            "experience": self._extract_experience(text),
-        }
+        # # Parse information
+        # parsed_data = {
+        #     "name": self._extract_name(text),
+        #     "email": self._extract_email(text),
+        #     "phone": self._extract_phone(text),
+        #     "skills": self._extract_skills(text),
+        #     "education": self._extract_education(text),
+        #     "experience": self._extract_experience(text),
+        # }
         
-        return parsed_data
+        # return parsed_data
+
+        suffix = os.path.splitext(filename)[1].lower()  # ".pdf" or ".docx"
+
+        # pyresparser usage is based on a file path [web:114]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(file_content)
+            tmp_path = tmp.name
+
+        print("here")
+        try:
+            data = PyResumeParser(tmp_path).get_extracted_data()
+            print(data)
+            return data or {}
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
     
     def _extract_text(self, file_content: bytes, filename: str) -> str:
         """
         Extract text from PDF or DOCX
         """
         text = ""
+
+        data = PyResumeParser(filename).get_extracted_data()
+
+
+        print(data)
         
         if filename.lower().endswith('.pdf'):
             with pdfplumber.open(io.BytesIO(file_content)) as pdf:
@@ -134,11 +163,11 @@ class ResumeParser:
         return experience
 
     
-    def _extract_companies(self, text: str) -> list:
+    # def _extract_companies(self, text: str) -> list:
 
-        """
-        Extracting companies
-        """
-        companies = []
+    #     """
+    #     Extracting companies
+    #     """
+    #     companies = []
 
-        doc = self.
+    #     doc = self.

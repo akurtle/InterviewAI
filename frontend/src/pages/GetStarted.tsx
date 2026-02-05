@@ -17,13 +17,18 @@ const GetStarted: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<StepType>('choose');
   const [selectedOption, setSelectedOption] = useState<'interview' | 'resume' | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFilePath, setUploadedFilePath] = useState<string | undefined>("");
   const [analysisResult, setAnalysisResult] = useState<ParseResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setUploadedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setUploadedFile(file);
+      // Store the file path or create a temporary path
+      const tempPath = URL.createObjectURL(file);
+      setUploadedFilePath(tempPath);
     }
   };
 
@@ -40,7 +45,7 @@ const GetStarted: React.FC = () => {
       
       try {
         const formData = new FormData();
-        formData.append('file', uploadedFile);
+        formData.append('file', uploadedFile,uploadedFilePath);
         
         const response = await fetch('http://localhost:8000/parse-resume/', {
           method: 'POST',
@@ -157,7 +162,7 @@ const GetStarted: React.FC = () => {
             {currentStep === 'upload' && (
               <Upload selectedOption={selectedOption} uploadedFile={uploadedFile} 
               setCurrentStep={setCurrentStep} setSelectedOption={setSelectedOption} 
-              setUploadedFile={setUploadedFile} handleFileUpload={handleFileUpload} 
+              setUploadedFile={setUploadedFile} uploadedFilePath={uploadedFilePath} handleFileUpload={handleFileUpload} 
               handleAnalyze={handleAnalyze}/>
             )}
 
