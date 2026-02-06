@@ -3,6 +3,7 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
 type RecorderState = "idle" | "recording" | "stopped";
+type RecordMode = "video" | "audio";
 
 const MockInterview: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -11,6 +12,13 @@ const MockInterview: React.FC = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
+
+  const audioStreamRef = useRef<MediaStream | null>(null);
+
+  const [recordMode, setRecordMode] = useState<RecordMode>("video");
+  const [audioOnlyUrl, setAudioOnlyUrl] = useState<string | null>(null);
+
+
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [recState, setRecState] = useState<RecorderState>("idle");
@@ -18,6 +26,17 @@ const MockInterview: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const canRecord = useMemo(() => typeof window !== "undefined" && "MediaRecorder" in window, []);
+
+  const pickAudioMimeType = () => {
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
+    ];
+    return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+  };
+
 
   const attachStreamToVideo = (stream: MediaStream) => {
     if (!videoRef.current) return;
@@ -66,48 +85,74 @@ const MockInterview: React.FC = () => {
     streamRef.current?.getAudioTracks().forEach((t) => (t.enabled = next));
   };
 
-  const startRecording = () => {
+  const startRecording = async () => {
     setError(null);
-    if (!streamRef.current) {
-      setError("Start the camera first.");
-      return;
-    }
+
     if (!canRecord) {
       setError("MediaRecorder is not supported in this browser.");
       return;
     }
 
-    // Cleanup previous recording URL
+    // Cleanup previous URLs
     if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    if (audioOnlyUrl) URL.revokeObjectURL(audioOnlyUrl);
     setRecordingUrl(null);
+    setAudioOnlyUrl(null);
 
     chunksRef.current = [];
-    const mimeType =
-      MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-        ? "video/webm;codecs=vp9,opus"
-        : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
-          ? "video/webm;codecs=vp8,opus"
-          : "video/webm";
 
-    const recorder = new MediaRecorder(streamRef.current, { mimeType });
-    mediaRecorderRef.current = recorder;
+    try {
+      let streamToRecord: MediaStream;
 
-    recorder.ondataavailable = (evt) => {
-      if (evt.data && evt.data.size > 0) chunksRef.current.push(evt.data);
-    };
+      if (recordMode === "audio") {
+        // mic-only stream (does NOT require camera)
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); // [web:42]
+        audioStreamRef.current = micStream;
+        // apply current mic toggle to this stream too
+        micStream.getAudioTracks().forEach((t) => (t.enabled = micOn));
+        streamToRecord = micStream;
+      } else {
+        // video+audio stream from your live camera
+        if (!streamRef.current) {
+          setError("Start the camera first (or switch to audio-only).");
+          return;
+        }
+        streamToRecord = streamRef.current;
+      }
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      setRecordingUrl(url);
-      setRecState("stopped");
-    };
+      const mimeType =
+        recordMode === "audio"
+          ? pickAudioMimeType()
+          : (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+            ? "video/webm;codecs=vp9,opus"
+            : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+              ? "video/webm;codecs=vp8,opus"
+              : "video/webm");
 
-    recorder.onerror = () => setError("Recording error occurred.");
+      const recorder = new MediaRecorder(streamToRecord, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
 
-    recorder.start(); // Start capturing stream data [web:38][web:36]
-    setRecState("recording");
+      recorder.ondataavailable = (evt) => {
+        if (evt.data && evt.data.size > 0) chunksRef.current.push(evt.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType || undefined });
+        const url = URL.createObjectURL(blob);
+
+        if (recordMode === "audio") setAudioOnlyUrl(url);
+        else setRecordingUrl(url);
+
+        setRecState("stopped");
+      };
+
+      recorder.start(); // start capturing [web:36][web:42]
+      setRecState("recording");
+    } catch (e: any) {
+      setError(e?.message ?? "Could not start recording.");
+    }
   };
+
 
   const stopRecording = () => {
     const recorder = mediaRecorderRef.current;
@@ -162,6 +207,10 @@ const MockInterview: React.FC = () => {
                     {recState === "recording" ? "Recording…" : recState === "stopped" ? "Recording ready" : "Idle"}
                   </span>
                 </div>
+
+                
+    
+
               </div>
 
               <div className="relative aspect-video bg-black">
@@ -169,7 +218,7 @@ const MockInterview: React.FC = () => {
                   ref={videoRef}
                   className="w-full h-full object-cover"
                   playsInline
-                  muted // prevent echo during live preview
+                  muted
                 />
                 {!cameraOn && (
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -185,7 +234,19 @@ const MockInterview: React.FC = () => {
                   </div>
                 )}
               </div>
-
+            {audioOnlyUrl && (
+                  <div className="mt-6 border-t border-gray-800 p-6">
+                    <h3 className="text-white font-semibold mb-3">Audio recording preview</h3>
+                    <audio className="w-full" src={audioOnlyUrl} controls />
+                    <a
+                      className="mt-3 inline-block text-emerald-400 hover:text-emerald-300 text-sm"
+                      href={audioOnlyUrl}
+                      download="mock-interview-audio.webm"
+                    >
+                      Download audio
+                    </a>
+                  </div>
+                )}
               {error && (
                 <div className="px-6 py-4 border-t border-gray-800">
                   <p className="text-sm text-red-300">{error}</p>
@@ -193,9 +254,44 @@ const MockInterview: React.FC = () => {
               )}
             </div>
 
+
+            
+
             {/* Controls / checklist */}
             <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-6">
               <h2 className="text-white text-lg font-semibold mb-4">Controls</h2>
+              <div className="mt-2 mb-4">
+                <p className="text-gray-400 text-sm mb-2">Recording mode</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRecordMode("video")}
+                    className={`px-3 py-2 rounded-lg border text-sm font-semibold transition
+        ${recordMode === "video"
+                        ? "border-emerald-500/60 bg-emerald-500/10 text-white"
+                        : "border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"}`}
+                  >
+                    Video + Audio
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRecordMode("audio")}
+                    className={`px-3 py-2 rounded-lg border text-sm font-semibold transition
+        ${recordMode === "audio"
+                        ? "border-emerald-500/60 bg-emerald-500/10 text-white"
+                        : "border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"}`}
+                  >
+                    Audio only
+                  </button>
+                </div>
+
+                {recordMode === "audio" && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Audio-only recording works without turning on the camera.
+                  </p>
+                )}
+              </div>
 
               <div className="space-y-3">
                 {!cameraOn ? (
@@ -217,11 +313,10 @@ const MockInterview: React.FC = () => {
                 <button
                   onClick={toggleMic}
                   disabled={!cameraOn}
-                  className={`w-full px-4 py-3 rounded-lg font-semibold transition border ${
-                    cameraOn
-                      ? "border-emerald-500/40 text-white hover:bg-emerald-500/10"
-                      : "border-gray-800 text-gray-500 cursor-not-allowed"
-                  }`}
+                  className={`w-full px-4 py-3 rounded-lg font-semibold transition border ${cameraOn
+                    ? "border-emerald-500/40 text-white hover:bg-emerald-500/10"
+                    : "border-gray-800 text-gray-500 cursor-not-allowed"
+                    }`}
                 >
                   {micOn ? "Mute microphone" : "Unmute microphone"}
                 </button>
@@ -231,11 +326,10 @@ const MockInterview: React.FC = () => {
                 <button
                   onClick={startRecording}
                   disabled={!cameraOn || recState === "recording"}
-                  className={`w-full px-4 py-3 rounded-lg font-semibold transition ${
-                    !cameraOn || recState === "recording"
-                      ? "bg-gray-800 text-gray-600 cursor-not-allowed"
-                      : "bg-emerald-500 hover:bg-emerald-600 text-white"
-                  }`}
+                  className={`w-full px-4 py-3 rounded-lg font-semibold transition ${!cameraOn || recState === "recording"
+                    ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                    : "bg-emerald-500 hover:bg-emerald-600 text-white"
+                    }`}
                 >
                   Start recording
                 </button>
@@ -243,11 +337,10 @@ const MockInterview: React.FC = () => {
                 <button
                   onClick={stopRecording}
                   disabled={recState !== "recording"}
-                  className={`w-full px-4 py-3 rounded-lg font-semibold transition ${
-                    recState !== "recording"
-                      ? "bg-gray-800 text-gray-600 cursor-not-allowed"
-                      : "bg-gray-800 hover:bg-gray-700 text-white"
-                  }`}
+                  className={`w-full px-4 py-3 rounded-lg font-semibold transition ${recState !== "recording"
+                    ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                    : "bg-gray-800 hover:bg-gray-700 text-white"
+                    }`}
                 >
                   Stop recording
                 </button>
