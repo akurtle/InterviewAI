@@ -1,11 +1,32 @@
+import json
 import shutil
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+import uuid
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
+from typing import Any, Dict, List
 import os,tempfile
 from app.parsers.resume_parser import ResumeParser
 from app.models import ResumeData, ParseResponse
 from app.utils.file_handler import save_upload_file, validate_file
+
+
+import asyncio
+from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc.contrib.media import MediaRelay
+from pydantic import BaseModel
+
+
+pcs: Dict[str, RTCPeerConnection] = {}
+relay = MediaRelay()
+
+# Store websocket connections per session_id to push AI results
+ws_clients: Dict[str, WebSocket] = {}
+
+
+class Offer(BaseModel):
+    sdp: str
+    type: str
+    session_id: str | None = None
 
 app = FastAPI(
     title="Resume Parser API",
@@ -115,6 +136,29 @@ async def parse_resumes_batch(files: List[UploadFile] = File(...)):
     
     return results
 
+
+async def safe_send(session_id: str, message: Dict[str, Any]):
+    ws = ws_clients.get(session_id)
+    if ws:
+        await ws.send_text(json.dumps(message))
+
+@app.post("/webrtc/offer")
+async def webrtc_offer(offer:Offer):
+    session_id = offer.session_id or str(uuid.uuid5())
+
+
+    
+
+        
+# @app.websocket("/ws/interview")
+# async def interview_ws(ws: WebSocket):
+#     await ws.accept()
+#     try: 
+#         while True:
+#             data = await ws.receive_json()
+
+
+            
 # Health check endpoint
 @app.get("/health")
 async def health_check():

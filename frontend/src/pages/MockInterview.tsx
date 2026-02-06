@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import AudioLevelMeter from "../components/Interview/AudioLevelMeter";
+
 
 type RecorderState = "idle" | "recording" | "stopped";
 type RecordMode = "video" | "audio";
@@ -26,6 +28,53 @@ const MockInterview: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const canRecord = useMemo(() => typeof window !== "undefined" && "MediaRecorder" in window, []);
+
+  const canToggleMic = cameraOn || recordMode === "audio";
+
+  const canStartRecording = recState !== "recording" && (recordMode === "audio" || cameraOn);
+
+  // test webrtc 
+
+  async function startWebRTC() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    // show local preview
+    const videoEl = document.querySelector("video#preview") as HTMLVideoElement;
+    videoEl.srcObject = stream;
+    await videoEl.play();
+
+    // add tracks
+    for (const track of stream.getTracks()) pc.addTrack(track, stream);
+
+    // create offer
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    // send offer to FastAPI
+    const res = await fetch("http://localhost:8000/webrtc/offer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pc.localDescription),
+    });
+
+    const answer = await res.json();
+    await pc.setRemoteDescription(answer);
+
+    // connect results websocket
+    const sessionId = answer.session_id;
+    const ws = new WebSocket(`ws://localhost:8000/ws/results/${sessionId}`);
+    ws.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+      // update transcript + vision feedback UI
+    };
+
+    return { pc, stream, sessionId, ws };
+  }
+
 
   const pickAudioMimeType = () => {
     const candidates = [
@@ -82,8 +131,14 @@ const MockInterview: React.FC = () => {
   const toggleMic = () => {
     const next = !micOn;
     setMicOn(next);
+
+    // camera stream audio tracks
     streamRef.current?.getAudioTracks().forEach((t) => (t.enabled = next));
+
+    // audio-only stream tracks (when recording audio-only)
+    audioStreamRef.current?.getAudioTracks().forEach((t) => (t.enabled = next));
   };
+
 
   const startRecording = async () => {
     setError(null);
@@ -158,16 +213,25 @@ const MockInterview: React.FC = () => {
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== "inactive") recorder.stop();
     setRecState("stopped");
+
+    if (recordMode === "audio") {
+      audioStreamRef.current?.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
   };
 
-  useEffect(() => {
+
+    useEffect(() => {
     return () => {
-      // cleanup on unmount
       if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+      if (audioOnlyUrl) URL.revokeObjectURL(audioOnlyUrl);
+
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   return (
     <div className="min-h-screen bg-black">
@@ -177,7 +241,7 @@ const MockInterview: React.FC = () => {
         {/* Background glow */}
         <div className="absolute inset-0 opacity-20">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500 rounded-full blur-3xl animate-pulse delay-700" />
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500 rounded-full blur-3xl animate-pulse delay-900" />
         </div>
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
 
@@ -208,12 +272,12 @@ const MockInterview: React.FC = () => {
                   </span>
                 </div>
 
-                
-    
+
+
 
               </div>
 
-              <div className="relative aspect-video bg-black">
+            { recordMode!=="audio" && <div className="relative aspect-video bg-black">
                 <video
                   ref={videoRef}
                   className="w-full h-full object-cover"
@@ -233,20 +297,21 @@ const MockInterview: React.FC = () => {
                     </div>
                   </div>
                 )}
-              </div>
-            {audioOnlyUrl && (
-                  <div className="mt-6 border-t border-gray-800 p-6">
-                    <h3 className="text-white font-semibold mb-3">Audio recording preview</h3>
-                    <audio className="w-full" src={audioOnlyUrl} controls />
-                    <a
-                      className="mt-3 inline-block text-emerald-400 hover:text-emerald-300 text-sm"
-                      href={audioOnlyUrl}
-                      download="mock-interview-audio.webm"
-                    >
-                      Download audio
-                    </a>
-                  </div>
-                )}
+              </div>}
+              
+              {audioOnlyUrl && (
+                <div className="mt-6 border-t border-gray-800 p-6">
+                  <h3 className="text-white font-semibold mb-3">Audio recording preview</h3>
+                  <audio className="w-full" src={audioOnlyUrl} controls />
+                  <a
+                    className="mt-3 inline-block text-emerald-400 hover:text-emerald-300 text-sm"
+                    href={audioOnlyUrl}
+                    download="mock-interview-audio.webm"
+                  >
+                    Download audio
+                  </a>
+                </div>
+              )}
               {error && (
                 <div className="px-6 py-4 border-t border-gray-800">
                   <p className="text-sm text-red-300">{error}</p>
@@ -255,7 +320,7 @@ const MockInterview: React.FC = () => {
             </div>
 
 
-            
+
 
             {/* Controls / checklist */}
             <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-6">
@@ -312,7 +377,7 @@ const MockInterview: React.FC = () => {
 
                 <button
                   onClick={toggleMic}
-                  disabled={!cameraOn}
+                  disabled={!canToggleMic}
                   className={`w-full px-4 py-3 rounded-lg font-semibold transition border ${cameraOn
                     ? "border-emerald-500/40 text-white hover:bg-emerald-500/10"
                     : "border-gray-800 text-gray-500 cursor-not-allowed"
@@ -325,8 +390,8 @@ const MockInterview: React.FC = () => {
 
                 <button
                   onClick={startRecording}
-                  disabled={!cameraOn || recState === "recording"}
-                  className={`w-full px-4 py-3 rounded-lg font-semibold transition ${!cameraOn || recState === "recording"
+                  disabled={!canStartRecording}
+                  className={`w-full px-4 py-3 rounded-lg font-semibold transition ${!canStartRecording
                     ? "bg-gray-800 text-gray-600 cursor-not-allowed"
                     : "bg-emerald-500 hover:bg-emerald-600 text-white"
                     }`}
