@@ -1,63 +1,79 @@
-import tempfile
 import pdfplumber
 from docx import Document
 import io
+import json
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import spacy
-from pyresparser import ResumeParser as PyResumeParser
-import nltk
+
+from .resume_parser_helpers.helper_functions import ResumeParserHelpers as RPH
 
 import os
 
 class ResumeParser:
     def __init__(self):
         # Load spaCy model
+
+        self.parser = RPH()
+
         try:
             self.nlp = spacy.load("en_core_web_sm")
             
         except:
             print("Downloading spaCy model...")
-            import os
             os.system("python -m spacy download en_core_web_sm")
             self.nlp = spacy.load("en_core_web_sm")
+
+        self._section_headings = self.parser._load_section_headings()
+        self._month_pattern = (
+            r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+            r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|"
+            r"Dec(?:ember)?)"
+        )
+        self._date_range_re = re.compile(
+            rf"(?P<range>{self._month_pattern}\s+\d{{4}}\s*[-–—]\s*"
+            rf"(?:Present|Current|{self._month_pattern}\s+\d{{4}}))",
+            re.IGNORECASE,
+        )
+        self._year_range_re = re.compile(
+            r"(?P<range>(?:19|20)\d{2}\s*[-–—]\s*(?:Present|Current|(?:19|20)\d{2}))",
+            re.IGNORECASE,
+        )
     
-    def parse(self, file_content: bytes, filename: str, filepath:str) -> Dict[str, Any]:
+    def parse(self, file_content: bytes, filename: str, filepath: Optional[str] = None) -> Dict[str, Any]:
         """
         Main parsing method
         """
-        # Extract text
-        # text = self._extract_text(file_content, filename)
-        
-        # # Parse information
-        # parsed_data = {
-        #     "name": self._extract_name(text),
-        #     "email": self._extract_email(text),
-        #     "phone": self._extract_phone(text),
-        #     "skills": self._extract_skills(text),
-        #     "education": self._extract_education(text),
-        #     "experience": self._extract_experience(text),
-        # }
-        
-        # return parsed_data
+        text = self._extract_text(file_content, filename)
+        sections = self._extract_sections(text)
 
-        suffix = os.path.splitext(filename)[1].lower()  # ".pdf" or ".docx"
+        skills_lines = sections.get("skills", [])
+        skills = self.parser._parse_skills_lines(skills_lines) if skills_lines else self._extract_skills(text)
 
-        # pyresparser usage is based on a file path [web:114]
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(file_content)
-            tmp_path = tmp.name
+        education_lines = sections.get("education", [])
+        if education_lines:
+            education = [{"text": line} for line in education_lines]
+        else:
+            education = self._extract_education(text)
 
-        print("here")
-        try:
-            data = PyResumeParser(tmp_path).get_extracted_data()
-            print(data)
-            return data or {}
-        finally:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
+        experience_lines = sections.get("experience", [])
+        if experience_lines:
+            experience = self.parser._parse_experience_entries(experience_lines)
+            if not experience:
+                experience = [{"text": line} for line in experience_lines]
+        else:
+            experience = self._extract_experience(text)
+
+        parsed_data = {
+            "name": self._extract_name(text),
+            "email": self._extract_email(text),
+            "phone": self._extract_phone(text),
+            "skills": skills,
+            "education": education,
+            "experience": experience,
+        }
+
+        return parsed_data
     
     def _extract_text(self, file_content: bytes, filename: str) -> str:
         """
@@ -65,11 +81,6 @@ class ResumeParser:
         """
         text = ""
 
-        data = PyResumeParser(filename).get_extracted_data()
-
-
-        print(data)
-        
         if filename.lower().endswith('.pdf'):
             with pdfplumber.open(io.BytesIO(file_content)) as pdf:
                 for page in pdf.pages:
@@ -80,6 +91,62 @@ class ResumeParser:
             text = "\n".join([para.text for para in doc.paragraphs])
         
         return text
+
+    def _extract_sections(self, text: str) -> Dict[str, list]:
+        """
+        Extract section blocks (e.g., Skills, Experience, Education) based on headings.
+        Returns a dict of section -> list of lines.
+        """
+        normalized_map = {}
+        for key, values in self._section_headings.items():
+            normalized_map[key] = set(self.parser._normalize_heading(v) for v in values)
+
+        sections: Dict[str, list] = {}
+        current_section = None
+
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            # Handle "Heading: content" in one line
+            if ":" in line:
+                head, rest = line.split(":", 1)
+                section_key = self.parser._match_heading(head, normalized_map)
+                if section_key:
+                    current_section = section_key
+                    sections.setdefault(current_section, [])
+                    for part in self._explode_line(rest):
+                        sections[current_section].append(part)
+                    continue
+
+            section_key = self.parser._match_heading(line, normalized_map)
+            if section_key:
+                current_section = section_key
+                sections.setdefault(current_section, [])
+                continue
+
+            if current_section:
+                for part in self._explode_line(line):
+                    sections[current_section].append(part)
+
+        return sections
+
+
+    def _explode_line(self, line: str) -> list:
+        line = line.strip()
+        if not line:
+            return []
+        # If the line starts with a bullet, keep the remainder as one item
+        if re.match(r'^\s*[-*\u2022]\s+', line):
+            return [re.sub(r'^\s*[-*\u2022]\s+', '', line).strip()]
+        # Split on middle dots or bullets between items
+        if re.search(r'\s[\u2022\u00b7]\s', line):
+            return [p.strip() for p in re.split(r'\s[\u2022\u00b7]\s', line) if p.strip()]
+        # Split on pipe-separated skills
+        if " | " in line:
+            return [p.strip() for p in line.split(" | ") if p.strip()]
+        return [line]
     
     def _extract_name(self, text: str) -> str:
         """
@@ -114,6 +181,13 @@ class ResumeParser:
         """
         Extract skills (basic implementation)
         """
+        sections = self._extract_sections(text)
+        skills_lines = sections.get("skills", [])
+        if skills_lines:
+            parsed = self.parser._parse_skills_lines(skills_lines)
+            if parsed:
+                return parsed
+
         # Common skills to look for
         common_skills = [
             'python', 'java', 'javascript', 'c++', 'sql', 'react', 'angular',
@@ -121,11 +195,13 @@ class ResumeParser:
             'aws', 'azure', 'docker', 'kubernetes', 'git', 'machine learning',
             'data analysis', 'project management'
         ]
-        
+
         text_lower = text.lower()
+
         found_skills = [skill for skill in common_skills if skill in text_lower]
         
         return found_skills
+
     
     def _extract_education(self, text: str) -> list:
         """

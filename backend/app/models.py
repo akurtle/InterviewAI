@@ -9,10 +9,6 @@ class ResumeData(BaseModel):
     education: Optional[List[dict]] = []
     experience: Optional[List[dict]] = []
     total_experience: Optional[str] = None
-    college_name: Optional[List[str]] = []
-    degree: Optional[List[str]] = []
-    designation: Optional[List[str]] = []
-    companies: Optional[List[str]] = []
     
 class ParseResponse(BaseModel):
     success: bool

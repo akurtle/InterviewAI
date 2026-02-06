@@ -2,7 +2,7 @@ import shutil
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
-import os
+import os,tempfile
 from app.parsers.resume_parser import ResumeParser
 from app.models import ResumeData, ParseResponse
 from app.utils.file_handler import save_upload_file, validate_file
@@ -30,12 +30,12 @@ async def root():
     return {"message": "Resume Parser API", "status": "active"}
 
 @app.post("/parse-resume/", response_model=ParseResponse)
-async def parse_resume(file: UploadFile = File(...),filePath: str=Form("")):
+async def parse_resume(file: UploadFile = File(...),filePath: str = Form(...)  ):
     """
     Parse a resume file (PDF or DOCX) and extract structured information
     """
 
-    print(file)
+    print(filePath)
     # Validate file
     if not validate_file(file):
         raise HTTPException(status_code=400, detail="Invalid file format. Only PDF and DOCX are supported.")
@@ -43,19 +43,25 @@ async def parse_resume(file: UploadFile = File(...),filePath: str=Form("")):
     try:
         # Read file content
         contents = await file.read()
-        print("here",filePath)
-        temp_path = f"/tmp/{file.filename}"
+        # print("here",filePath)
+        # suffix = os.path.splitext(file.filename)[1].lower()
+        # tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        # tmp_path = tmp.name
+        # tmp.close()
 
-        with open(temp_path, "wb") as buffer:
-            # Copying file data to the temporary file
-            shutil.copyfileobj(file.file, buffer)
+        # print("here2")
+        
+        # with open(tmp_path, "wb") as buffer:
+        #     # Copying file data to the temporary file
+        #     print("error")
+        #     shutil.copyfileobj(file.file, buffer)
 
-        # The 'temp_path' is the path you can use
-        print(f"File saved at: {temp_path}")
-        print(file.path)
+        # # The 'temp_path' is the path you can use
+        # print(f"File saved at: {tmp_path}")
+        # print(file.path)
         
         # Parse resume
-        parsed_data = resume_parser.parse(contents, file.filename,temp_path)
+        parsed_data = resume_parser.parse(contents, file.filename,"")
         
         print("data read")
         return ParseResponse(
@@ -65,6 +71,7 @@ async def parse_resume(file: UploadFile = File(...),filePath: str=Form("")):
         )
     
     except Exception as e:
+        print( 'why?')
         raise HTTPException(status_code=500, detail=f"Error parsing resume: {str(e)}")
     
     finally:
