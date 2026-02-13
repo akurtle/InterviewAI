@@ -1,13 +1,16 @@
 import json
 import shutil
 import uuid
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, WebSocket
+from app.parsers.video_parser.helpers import run_video_pipeline, send_results
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Any, Dict, List
 import os,tempfile
 from app.parsers.resume_parser import ResumeParser
 from app.models import ResumeData, ParseResponse
 from app.utils.file_handler import save_upload_file, validate_file
+
+import logging
 
 
 import asyncio
@@ -16,11 +19,18 @@ from aiortc.contrib.media import MediaRelay
 from pydantic import BaseModel
 
 
+from whisperlivekit import AudioProcessor, TranscriptionEngine
+
+
 pcs: Dict[str, RTCPeerConnection] = {}
 relay = MediaRelay()
 
-# Store websocket connections per session_id to push AI results
 ws_clients: Dict[str, WebSocket] = {}
+
+
+logging.getLogger("whisperlivekit").setLevel(logging.ERROR)
+logging.getLogger("uvicorn").setLevel(logging.ERROR)
+logging.getLogger("uvicorn.access").setLevel(logging.ERROR)
 
 
 class Offer(BaseModel):
@@ -43,12 +53,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+ALLOWED_ORIGINS = {"http://localhost:3000"}
+
+
 # Initialize parser
 resume_parser = ResumeParser()
 
 @app.get("/")
 async def root():
-    return {"message": "Resume Parser API", "status": "active"}
+    return {"message": "Interviewer", "status": "active"}
 
 @app.post("/parse-resume/", response_model=ParseResponse)
 async def parse_resume(file: UploadFile = File(...),filePath: str = Form(...)  ):
@@ -64,22 +77,6 @@ async def parse_resume(file: UploadFile = File(...),filePath: str = Form(...)  )
     try:
         # Read file content
         contents = await file.read()
-        # print("here",filePath)
-        # suffix = os.path.splitext(file.filename)[1].lower()
-        # tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        # tmp_path = tmp.name
-        # tmp.close()
-
-        # print("here2")
-        
-        # with open(tmp_path, "wb") as buffer:
-        #     # Copying file data to the temporary file
-        #     print("error")
-        #     shutil.copyfileobj(file.file, buffer)
-
-        # # The 'temp_path' is the path you can use
-        # print(f"File saved at: {tmp_path}")
-        # print(file.path)
         
         # Parse resume
         parsed_data = resume_parser.parse(contents, file.filename,"")
@@ -136,20 +133,87 @@ async def parse_resumes_batch(files: List[UploadFile] = File(...)):
     
     return results
 
-
-async def safe_send(session_id: str, message: Dict[str, Any]):
-    ws = ws_clients.get(session_id)
-    if ws:
-        await ws.send_text(json.dumps(message))
-
 @app.post("/webrtc/offer")
 async def webrtc_offer(offer:Offer):
-    session_id = offer.session_id or str(uuid.uuid5())
+    session_id = offer.session_id or str(uuid.uuid4())
 
+    print("session_id:",session_id)
 
-    
+    pc = RTCPeerConnection()
 
+    pcs[session_id] = pc
+
+    @pc.on("track")
+    def on_track(track):
+
+        relayed = relay.subscribe(track)
+
+        if track.kind == "audio":
+            print("here")
+            # asyncio.create_task(run_audio_pipeline(session_id, relayed))
         
+        elif track.kind == "video":
+            asyncio.create_task(run_video_pipeline(session_id, relayed))
+        
+    await pc.setRemoteDescription(RTCSessionDescription(sdp=offer.sdp, type=offer.type))
+
+    answer = await pc.createAnswer()
+
+    await pc.setLocalDescription(answer)
+
+    return {
+        "session_id": session_id,
+        "sdp": pc.localDescription.sdp,
+        "type": pc.localDescription.type,
+    }
+
+transcription_engine = None
+@app.websocket("/asr")
+async def asr(ws: WebSocket):
+    await ws.accept()
+
+    ap = AudioProcessor(transcription_engine=TranscriptionEngine(model="base", diarization=False, lan="en"))
+    gen = await ap.create_tasks()
+
+    task = asyncio.create_task(send_results(ws,gen))
+
+    try:
+        while True:
+            chunk = await ws.receive_bytes()
+            await ap.process_audio(chunk)
+
+    except WebSocketDisconnect:
+        logging.info("Client disconnected")
+
+    except Exception:
+        logging.exception("WS crashed while processing audio")
+
+    finally:
+        task.cancel()
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+@app.websocket("/ws/results/{session_id}")
+async def ws_results(ws: WebSocket, session_id: str):
+    origin = ws.headers.get("origin")
+    if origin not in ALLOWED_ORIGINS:
+        await ws.close(code=1008)  # policy violation
+        return
+    await ws.accept()
+    ws_clients[session_id] = ws
+    try:
+        # Keep open; optionally receive control messages
+        while True:
+            _ = await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if ws_clients.get(session_id) is ws:
+            ws_clients.pop(session_id, None)
+
+
 # @app.websocket("/ws/interview")
 # async def interview_ws(ws: WebSocket):
 #     await ws.accept()
@@ -158,7 +222,7 @@ async def webrtc_offer(offer:Offer):
 #             data = await ws.receive_json()
 
 
-            
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
