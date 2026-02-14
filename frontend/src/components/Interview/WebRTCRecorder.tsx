@@ -31,6 +31,8 @@ const WebRTCRecorder: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
+  const apiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+  const wsBase = import.meta.env.VITE_WS_BASE ?? apiBase.replace(/^http/, "ws");
 
   const updateStatus = (newStatus: ConnectionStatus) => {
     setStatus(newStatus);
@@ -98,7 +100,7 @@ const WebRTCRecorder: React.FC<Props> = ({
       await pc.setLocalDescription(offer);
 
       // 5) Send offer to FastAPI backend
-      const response = await fetch("http://localhost:8000/webrtc/offer", {
+      const response = await fetch(`${apiBase}/webrtc/offer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -130,7 +132,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   };
 
   const connectResultsWebSocket = (sid: string) => {
-    const ws = new WebSocket(`ws://localhost:8000/ws/results/${sid}`);
+    const ws = new WebSocket(`${wsBase}/ws/results/${sid}`);
     wsRef.current = ws;
 
     ws.onopen = () => {

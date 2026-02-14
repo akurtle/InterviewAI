@@ -8,6 +8,10 @@ from typing import Any, Dict, List
 import os,tempfile
 from app.parsers.resume_parser import ResumeParser
 from app.models import ResumeData, ParseResponse
+from app.speech_models import SpeechSample, SpeechFeedbackResponse
+from app.video_models import VideoSample, VideoFeedbackResponse
+from app.analysis.speech_feedback import generate_feedback
+from app.analysis.video_feedback import generate_video_feedback
 from app.utils.file_handler import save_upload_file, validate_file
 
 import logging
@@ -212,6 +216,57 @@ async def ws_results(ws: WebSocket, session_id: str):
     finally:
         if ws_clients.get(session_id) is ws:
             ws_clients.pop(session_id, None)
+
+
+@app.post("/speech/feedback", response_model=SpeechFeedbackResponse)
+async def speech_feedback(sample: SpeechSample):
+    if not sample.text and not sample.words and not sample.segments:
+        raise HTTPException(status_code=400, detail="Provide text, words, or segments.")
+
+    text = sample.text or ""
+    if not text:
+        if sample.words:
+            text = " ".join([item.word for item in sample.words])
+        elif sample.segments:
+            text = " ".join([item.text for item in sample.segments])
+
+    word_items = None
+    if sample.words:
+        word_items = [
+            {"word": item.word, "start": item.start, "end": item.end}
+            for item in sample.words
+        ]
+
+    segment_items = None
+    if sample.segments:
+        segment_items = [
+            {"text": item.text, "start": item.start, "end": item.end}
+            for item in sample.segments
+        ]
+
+    return generate_feedback(text=text, word_items=word_items, segments=segment_items)
+
+
+@app.post("/video/feedback", response_model=VideoFeedbackResponse)
+async def video_feedback(sample: VideoSample):
+    print("here")
+    if not sample.frames:
+        print("here1")
+        raise HTTPException(status_code=400, detail="Provide at least one frame.")
+
+    frames = [
+        {
+            "timestamp": frame.timestamp,
+            "face_present": frame.face_present,
+            "looking_at_camera": frame.looking_at_camera,
+            "smile_prob": frame.smile_prob,
+            "head_yaw": frame.head_yaw,
+            "head_pitch": frame.head_pitch,
+        }
+        for frame in sample.frames
+    ]
+
+    return generate_video_feedback(frames=frames)
 
 
 # @app.websocket("/ws/interview")

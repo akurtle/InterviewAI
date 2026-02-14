@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function LiveTranscription() {
   // If you created /asr_text, change this to "/asr_text"
-  const WS_URL = useMemo(() => "ws://127.0.0.1:8000/asr", []);
+  const WS_URL = useMemo(() => {
+    const apiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+    const wsBase = import.meta.env.VITE_WS_BASE ?? apiBase.replace(/^http/, "ws");
+    return `${wsBase}/asr`;
+  }, []);
 
   const [transcript, setTranscript] = useState("");
   const [status, setStatus] = useState<
