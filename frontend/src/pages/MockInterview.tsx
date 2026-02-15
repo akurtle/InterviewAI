@@ -3,6 +3,7 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import WebRTCRecorder from "../components/Interview/WebRTCRecorder";
 import { useWhisperWS } from "../components/Interview/useWhisper";
+import QuestionGenerator from "../components/Interview/QuestionGenerator";
 
 type RecordMode = "video" | "audio" | "both";
 type FeedbackStatus = "idle" | "loading" | "ready" | "error";
@@ -22,6 +23,7 @@ const MockInterview: React.FC = () => {
   const [transcripts, setTranscripts] = useState<
     Array<{ text: string; isFinal: boolean; ts: number }>
   >([]);
+  const [interviewStartSignal, setInterviewStartSignal] = useState(0);
   const [visionData, setVisionData] = useState<any>(null);
   const [visionFrames, setVisionFrames] = useState<VisionFrame[]>([]);
   const [speechFeedback, setSpeechFeedback] = useState<any>(null);
@@ -29,6 +31,12 @@ const MockInterview: React.FC = () => {
   const [speechFeedbackStatus, setSpeechFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [videoFeedbackStatus, setVideoFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeQuestion, setActiveQuestion] = useState<{
+    text: string;
+    index: number;
+    total: number;
+  } | null>(null);
 
   const sessionStartRef = useRef({ transcriptIndex: 0, visionIndex: 0 });
   const lastSpeechSentRef = useRef<string>("");
@@ -39,7 +47,7 @@ const MockInterview: React.FC = () => {
   const WS_BASE = import.meta.env.VITE_WS_BASE ?? API_BASE.replace(/^http/, "ws");
 
   const handleTranscript = (text: string, isFinal: boolean) => {
-    console.log("Transcript:", text, "Final:", isFinal);
+    // console.log("Transcript:", text, "Final:", isFinal);
     setTranscripts((prev) => [...prev, { text, isFinal, ts: Date.now() }]);
   };
 
@@ -53,32 +61,8 @@ const MockInterview: React.FC = () => {
   });
 
 
-  const finalTranscripts = transcripts.filter((entry) => entry.isFinal);
-  const latestPartialEntry = [...transcripts].reverse().find((entry) => !entry.isFinal);
-  const latestPartial = latestPartialEntry?.text ?? "";
-  const formatTimestamp = (ts: number) =>
-    new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const LONG_PAUSE_MS = 2500;
 
-  const finalParagraphs = finalTranscripts.reduce<
-    Array<{ text: string; startTs: number; endTs: number; count: number }>
-  >((acc, entry) => {
-    if (acc.length === 0) {
-      acc.push({ text: entry.text, startTs: entry.ts, endTs: entry.ts, count: 1 });
-      return acc;
-    }
-
-    const current = acc[acc.length - 1];
-    if (entry.ts - current.endTs > LONG_PAUSE_MS) {
-      acc.push({ text: entry.text, startTs: entry.ts, endTs: entry.ts, count: 1 });
-    } else {
-      current.text = `${current.text} ${entry.text}`.trim();
-      current.endTs = entry.ts;
-      current.count += 1;
-    }
-
-    return acc;
-  }, []);
+  
 
   const markSessionStart = () => {
     sessionStartRef.current = {
@@ -92,18 +76,8 @@ const MockInterview: React.FC = () => {
     setFeedbackError(null);
   };
 
-  const clearTranscriptHistory = () => {
-    setTranscripts([]);
-    setVisionFrames([]);
-    setVisionData(null);
-    sessionStartRef.current = { transcriptIndex: 0, visionIndex: 0 };
-    lastSpeechSentRef.current = "";
-    lastVideoSentRef.current = 0;
-    setSpeechFeedback(null);
-    setVideoFeedback(null);
-    setSpeechFeedbackStatus("idle");
-    setVideoFeedbackStatus("idle");
-    setFeedbackError(null);
+  const triggerInterviewStart = () => {
+    setInterviewStartSignal((prev) => prev + 1);
   };
 
   const normalizeVisionFrame = (data: any): VisionFrame | null => {
@@ -328,6 +302,48 @@ const MockInterview: React.FC = () => {
   const speechNotes =
     Array.isArray(speechFeedback?.feedback) ? speechFeedback.feedback : [];
 
+  const videoMetricLabels: Array<{ key: string; label: string }> = [
+    { key: "frame_count", label: "Frames analyzed" },
+    { key: "face_presence_rate", label: "Face presence rate" },
+    { key: "gaze_at_camera_rate", label: "Gaze at camera rate" },
+    { key: "smile_rate", label: "Smile rate" },
+    { key: "avg_smile_prob", label: "Avg smile probability" },
+    { key: "head_movement_std", label: "Head movement std" },
+    { key: "long_gaze_break_rate", label: "Long gaze break rate" },
+    { key: "long_gaze_breaks", label: "Long gaze breaks" },
+    { key: "gaze_break_frames", label: "Gaze break frames" },
+  ];
+
+  const formatVideoMetric = (key: string, value: any) => {
+    if (value === null || value === undefined) return "N/A";
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) return String(value);
+
+    if (
+      ["face_presence_rate", "gaze_at_camera_rate", "smile_rate", "long_gaze_break_rate"].includes(key)
+    ) {
+      return `${(num * 100).toFixed(1)}%`;
+    }
+
+    if (["avg_smile_prob", "head_movement_std"].includes(key)) {
+      return num.toFixed(2);
+    }
+
+    return Math.round(num).toString();
+  };
+
+  const videoFeedbackScore =
+    typeof videoFeedback?.score === "number" ? videoFeedback.score : null;
+  const videoMetrics =
+    videoFeedback && typeof videoFeedback === "object" ? videoFeedback.metrics ?? null : null;
+  const videoWarnings =
+    Array.isArray(videoFeedback?.warnings) ? videoFeedback.warnings : [];
+  const videoNotes =
+    Array.isArray(videoFeedback?.feedback) ? videoFeedback.feedback : [];
+
+
+
+
 
   const handleVisionData = (data: any) => {
     console.log("Vision data:", data);
@@ -344,6 +360,7 @@ const MockInterview: React.FC = () => {
       return;
     }
     markSessionStart();
+    triggerInterviewStart();
     await startAudio();
   };
 
@@ -396,6 +413,7 @@ const MockInterview: React.FC = () => {
     if (prevStatus !== connectionStatus) {
       if (prevStatus === "idle" && connectionStatus === "connecting") {
         markSessionStart();
+        triggerInterviewStart();
       }
 
       if (
@@ -429,6 +447,25 @@ const MockInterview: React.FC = () => {
             <p className="text-gray-400 max-w-2xl mx-auto">
               Connect with AI-powered real-time feedback. Your audio and video are streamed live for instant analysis.
             </p>
+          </div>
+          {activeQuestion && (
+            <div className="fixed top-24 left-6 z-40 max-w-md">
+              <div className="rounded-2xl border border-emerald-500/30 bg-black/70 backdrop-blur px-4 py-3 shadow-lg">
+                <p className="text-xs text-emerald-300 mb-1">
+                  Question {activeQuestion.index + 1} of {activeQuestion.total}
+                </p>
+                <p className="text-sm text-white">{activeQuestion.text}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end mb-6">
+            <button
+              type="button"
+              onClick={() => setIsSettingsOpen(true)}
+              className="px-4 py-2 rounded-lg border border-gray-800 bg-black/30 text-sm text-gray-200 hover:bg-gray-900/50 transition"
+            >
+              Open settings
+            </button>
           </div>
 
           <div className={`grid gap-8 ${recordMode === "audio" ? "lg:grid-cols-1 max-w-4xl mx-auto" : "lg:grid-cols-3"}`}>
@@ -509,66 +546,6 @@ const MockInterview: React.FC = () => {
                   onVisionData={handleVisionData}
                 />
               )}
-
-              {/* Live Transcript Display */}
-              <div className="mt-6 bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <h2 className="text-white text-lg font-semibold">Live transcription</h2>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/30">
-                      {finalTranscripts.length} segments
-                    </span>
-                    <button
-                      type="button"
-                      onClick={clearTranscriptHistory}
-                      className="px-3 py-1.5 rounded-lg border text-xs font-semibold transition border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"
-                      disabled={transcripts.length === 0}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="p-3 rounded-lg border border-gray-800 bg-black/40">
-                    <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
-                      <span>Latest (partial)</span>
-                      {latestPartialEntry?.ts ? (
-                        <span className="font-mono">{formatTimestamp(latestPartialEntry.ts)}</span>
-                      ) : null}
-                    </div>
-                    <p className={`text-sm leading-6 ${latestPartial ? "text-gray-200" : "text-gray-500 italic"}`}>
-                      {latestPartial || "Listening for speech..."}
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded-lg border border-gray-800 bg-black/30 max-h-64 overflow-y-auto">
-                    {finalTranscripts.length === 0 ? (
-                      <p className="text-sm text-gray-500 italic">
-                        No finalized transcript yet. Start speaking to see results.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {finalParagraphs.slice(-8).map((para, index) => (
-                          <div
-                            key={`${index}-${para.startTs}`}
-                            className="rounded-lg border border-gray-800 bg-black/40 p-3"
-                          >
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                              <span className="font-mono">{formatTimestamp(para.startTs)}</span>
-                              <span>{para.count} segments</span>
-                            </div>
-                            <p className="text-sm text-gray-200 leading-6">{para.text}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
 
               {/* AI Feedback */}
               <div className="mt-6 bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-6">
@@ -709,18 +686,118 @@ const MockInterview: React.FC = () => {
                       </p>
                     )}
                     {videoFeedbackStatus === "ready" && (
-                      <pre className="text-xs text-gray-300 whitespace-pre-wrap">
-                        {JSON.stringify(videoFeedback, null, 2)}
-                      </pre>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/40 px-4 py-3">
+                          <div>
+                            <p className="text-xs text-gray-400">Overall score</p>
+                            <p className="text-2xl font-semibold text-white">
+                              {videoFeedbackScore !== null ? videoFeedbackScore.toFixed(1) : "N/A"}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-gray-500">Based on video frames</p>
+                            <p className="text-xs text-gray-400">
+                              {typeof videoMetrics?.frame_count === "number"
+                                ? `${videoMetrics.frame_count} frames`
+                                : "Frame count pending"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {videoNotes.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs uppercase tracking-wide text-gray-500">Key feedback</p>
+                            <ul className="space-y-2 text-sm text-gray-200">
+                              {videoNotes.map((note: string, index: number) => (
+                                <li key={`${index}-${note.slice(0, 12)}`} className="flex gap-2">
+                                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                  <span>{note}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {videoMetrics && (
+                          <div className="space-y-2">
+                            <p className="text-xs uppercase tracking-wide text-gray-500">Metrics</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {videoMetricLabels.map((metric) => (
+                                <div
+                                  key={metric.key}
+                                  className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/40 px-3 py-2"
+                                >
+                                  <span className="text-xs text-gray-400">{metric.label}</span>
+                                  <span className="text-sm text-white">
+                                    {formatVideoMetric(metric.key, videoMetrics?.[metric.key])}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {videoWarnings.length > 0 && (
+                          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">
+                            <p className="text-xs uppercase tracking-wide text-yellow-300 mb-2">Warnings</p>
+                            <ul className="space-y-1 text-sm text-yellow-200">
+                              {videoWarnings.map((warning: string, index: number) => (
+                                <li key={`${index}-${warning.slice(0, 12)}`}>{warning}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {!videoMetrics && videoNotes.length === 0 && videoWarnings.length === 0 && (
+                          <pre className="text-xs text-gray-300 whitespace-pre-wrap">
+                            {JSON.stringify(videoFeedback, null, 2)}
+                          </pre>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
             </div>
+            <div className="h-fit">
+              <QuestionGenerator
+                apiBase={API_BASE}
+                transcripts={transcripts}
+                startSignal={interviewStartSignal}
+                onCurrentQuestionChange={(question, index, total) => {
+                  if (!question) {
+                    setActiveQuestion(null);
+                    return;
+                  }
+                  setActiveQuestion({
+                    text: question.question,
+                    index,
+                    total,
+                  });
+                }}
+              />
+            </div>
 
-            {/* Controls Panel */}
-            <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-6 h-fit">
-              <h2 className="text-white text-lg font-semibold mb-4">Settings</h2>
+          </div>
+        </div>
+
+        {isSettingsOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div
+              className="absolute inset-0 bg-black/70"
+              onClick={() => setIsSettingsOpen(false)}
+            />
+            <div className="relative w-full max-w-3xl bg-gray-900/90 backdrop-blur border border-gray-800 rounded-2xl p-6 max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-white text-lg font-semibold">Settings</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="px-3 py-1.5 rounded-lg border border-gray-800 text-xs text-gray-300 hover:bg-gray-900/40 transition"
+                >
+                  Close
+                </button>
+              </div>
 
               {/* Recording Mode Selector */}
               <div className="mb-6">
@@ -735,7 +812,7 @@ const MockInterview: React.FC = () => {
                       : "border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"
                       } ${isSessionLocked ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    🎥 Both
+                    ðŸŽ¥ Both
                   </button>
 
                   <button
@@ -747,7 +824,7 @@ const MockInterview: React.FC = () => {
                       : "border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"
                       } ${isSessionLocked ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    📹 Video
+                    ðŸ“¹ Video
                   </button>
                 </div>
 
@@ -761,12 +838,8 @@ const MockInterview: React.FC = () => {
                       : "border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"
                       } ${isSessionLocked ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    🎤 Audio only
+                    ðŸŽ¤ Audio only
                   </button>
-
-
-
-
                 </div>
 
                 {isSessionLocked && (
@@ -832,7 +905,6 @@ const MockInterview: React.FC = () => {
                 </ul>
               </div>
 
-
               {/* Vision Data Display */}
               {visionData && (
                 <div className="border-t border-gray-800 pt-4 mt-4">
@@ -852,7 +924,7 @@ const MockInterview: React.FC = () => {
               )}
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       <Footer />

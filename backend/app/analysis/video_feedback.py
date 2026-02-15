@@ -170,7 +170,7 @@ def generate_video_feedback(
     frames: List[Dict[str, Any]],
     model: LinearVideoFeedbackModel = DEFAULT_VIDEO_MODEL,
 ) -> Dict[str, Any]:
-    print("here3")
+    print("\nhere3\n")
     features, metrics, warnings = extract_video_features(frames=frames)
     raw_score = model.predict(features)
     score = 100.0 / (1.0 + math.exp(-raw_score))

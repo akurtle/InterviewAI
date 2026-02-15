@@ -12,6 +12,8 @@ from app.speech_models import SpeechSample, SpeechFeedbackResponse
 from app.video_models import VideoSample, VideoFeedbackResponse
 from app.analysis.speech_feedback import generate_feedback
 from app.analysis.video_feedback import generate_video_feedback
+from app.question_models import QuestionRequest, QuestionResponse
+from app.questions.question_generator import generate_questions
 from app.utils.file_handler import save_upload_file, validate_file
 
 import logging
@@ -249,9 +251,9 @@ async def speech_feedback(sample: SpeechSample):
 
 @app.post("/video/feedback", response_model=VideoFeedbackResponse)
 async def video_feedback(sample: VideoSample):
-    print("here")
+    print("\nhere\n")
     if not sample.frames:
-        print("here1")
+        print("\nhere1\n")
         raise HTTPException(status_code=400, detail="Provide at least one frame.")
 
     frames = [
@@ -267,6 +269,16 @@ async def video_feedback(sample: VideoSample):
     ]
 
     return generate_video_feedback(frames=frames)
+
+
+@app.post("/questions/generate", response_model=QuestionResponse)
+async def questions_generate(request: QuestionRequest):
+    questions, warnings, used_inputs = generate_questions(request)
+    return QuestionResponse(
+        questions=questions,
+        warnings=warnings,
+        used_inputs=used_inputs,
+    )
 
 
 # @app.websocket("/ws/interview")

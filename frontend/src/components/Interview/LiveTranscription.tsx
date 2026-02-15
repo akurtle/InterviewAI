@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+
+// THIS IS NOT BEING USED 
+//  THIS WAS JUST BEING USED FOR TESTING
+//  KEEPING IT HERE IN CASE THINGS GO SOUTH UNDER
+// 
+
 export default function LiveTranscription() {
   // If you created /asr_text, change this to "/asr_text"
   const WS_URL = useMemo(() => {

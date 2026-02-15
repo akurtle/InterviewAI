@@ -77,8 +77,8 @@ async def safe_send(session_id: str, message: Dict[str, Any]):
     
 async def run_video_pipeline(session_id: str, track):
     await safe_send(session_id, {"type": "status", "stage": "video", "message": "Video track connected"})
-    while True:
-        frame = await track.recv()  # video frame
+    # while True:
+        # frame = await track.recv()  # video frame
         # TODO: convert frame to ndarray and run your model
         # await safe_send(session_id, {"type":"vision", "face_present": True, ...})
 
