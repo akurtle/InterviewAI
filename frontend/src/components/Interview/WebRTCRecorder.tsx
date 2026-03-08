@@ -26,6 +26,10 @@ const WebRTCRecorder: React.FC<Props> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const visionIntervalRef = useRef<number | null>(null);
+  const visionBusyRef = useRef(false);
+  const visionEnabledRef = useRef(false);
 
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +128,50 @@ const WebRTCRecorder: React.FC<Props> = ({
       connectResultsWebSocket(answer.session_id);
 
       updateStatus("connected");
+
+      // Start local vision sampling for video modes
+      if ((mode === "video" || mode === "both") && videoRef.current) {
+        if (!canvasRef.current) {
+          canvasRef.current = document.createElement("canvas");
+        }
+        visionEnabledRef.current = true;
+        if (visionIntervalRef.current) {
+          window.clearInterval(visionIntervalRef.current);
+        }
+        visionIntervalRef.current = window.setInterval(async () => {
+          if (visionBusyRef.current || !visionEnabledRef.current) return;
+          visionBusyRef.current = true;
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          if (!video || !canvas || video.readyState < 2) {
+            visionBusyRef.current = false;
+            return;
+          }
+          const width = video.videoWidth;
+          const height = video.videoHeight;
+          if (!width || !height) {
+            visionBusyRef.current = false;
+            return;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          ctx.drawImage(video, 0, 0, width, height);
+
+          const image_base64 = canvas.toDataURL("image/jpeg", 0.7);
+          onVisionData?.({
+            type: "frame",
+            frame: {
+              timestamp: Date.now(),
+              image_base64,
+            },
+            source: "client",
+          });
+          visionBusyRef.current = false;
+        }, 800);
+      }
     } catch (e: any) {
       console.error("WebRTC setup error:", e);
       setError(e?.message ?? "Failed to start WebRTC session");
@@ -189,6 +237,13 @@ const WebRTCRecorder: React.FC<Props> = ({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+
+    if (visionIntervalRef.current) {
+      window.clearInterval(visionIntervalRef.current);
+      visionIntervalRef.current = null;
+    }
+    visionEnabledRef.current = false;
+    visionBusyRef.current = false;
 
     updateStatus("idle");
     setSessionId(null);
@@ -275,7 +330,7 @@ const WebRTCRecorder: React.FC<Props> = ({
 
       {/* Audio-only indicator */}
       {mode === "audio" && (
-        <div className="p-12 bg-gradient-to-br from-gray-900 to-black flex items-center justify-center">
+        <div className="p-12 bg-linear-to-br from-gray-900 to-black flex items-center justify-center">
           <div className="text-center">
             <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg

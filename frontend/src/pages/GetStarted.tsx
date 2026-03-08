@@ -6,7 +6,6 @@ import InterviewButton from '../components/parsers/InterviewButton';
 import Upload from '../components/parsers/Upload';
 import Analysis from '../components/parsers/Analysis';
 import FeaturesMiniSection from '../components/parsers/FeaturesMiniSection';
-import { Link } from 'react-router-dom';
 
 export type StepType = 'choose' | 'upload' | 'analyze';
 
@@ -24,6 +23,7 @@ const GetStarted: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<ParseResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const isResumeFlow = selectedOption === 'resume';
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -89,61 +89,63 @@ const GetStarted: React.FC = () => {
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
 
         <div className="relative z-10 max-w-6xl mx-auto px-6">
-          {/* Progress Indicator */}
-          <div className="flex items-center justify-center mb-12">
-            <div className="flex items-center space-x-4">
-              {/* Step 1 */}
-              <div className="flex items-center">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${currentStep === 'choose'
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-emerald-500/20 text-emerald-400'
-                  }`}>
-                  1
+          {/* Progress Indicator (Resume Flow Only) */}
+          {isResumeFlow && (
+            <div className="flex items-center justify-center mb-12">
+              <div className="flex items-center space-x-4">
+                {/* Step 1 */}
+                <div className="flex items-center">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${currentStep === 'choose'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-emerald-500/20 text-emerald-400'
+                    }`}>
+                    1
+                  </div>
+                  <span className="ml-2 text-sm text-gray-400">Choose</span>
                 </div>
-                <span className="ml-2 text-sm text-gray-400">Choose</span>
-              </div>
 
-              <div className="w-16 h-px bg-gray-800"></div>
+                <div className="w-16 h-px bg-gray-800"></div>
 
-              {/* Step 2 */}
-              <div className="flex items-center">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${currentStep === 'upload'
-                    ? 'bg-emerald-500 text-white'
-                    : currentStep === 'analyze'
-                      ? 'bg-emerald-500/20 text-emerald-400'
+                {/* Step 2 */}
+                <div className="flex items-center">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${currentStep === 'upload'
+                      ? 'bg-emerald-500 text-white'
+                      : currentStep === 'analyze'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-gray-800 text-gray-600'
+                    }`}>
+                    2
+                  </div>
+                  <span className="ml-2 text-sm text-gray-400">Upload</span>
+                </div>
+
+                <div className="w-16 h-px bg-gray-800"></div>
+
+                {/* Step 3 */}
+                <div className="flex items-center">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${currentStep === 'analyze'
+                      ? 'bg-emerald-500 text-white'
                       : 'bg-gray-800 text-gray-600'
-                  }`}>
-                  2
+                    }`}>
+                    3
+                  </div>
+                  <span className="ml-2 text-sm text-gray-400">Analyze</span>
                 </div>
-                <span className="ml-2 text-sm text-gray-400">Upload</span>
-              </div>
-
-              <div className="w-16 h-px bg-gray-800"></div>
-
-              {/* Step 3 */}
-              <div className="flex items-center">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${currentStep === 'analyze'
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-gray-800 text-gray-600'
-                  }`}>
-                  3
-                </div>
-                <span className="ml-2 text-sm text-gray-400">Analyze</span>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Title */}
           <div className="text-center mb-16">
             <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
               {currentStep === 'choose' && 'Choose Your Path'}
-              {currentStep === 'upload' && 'Upload Your Content'}
+              {currentStep === 'upload' && 'Upload Your Resume'}
               {currentStep === 'analyze' && 'AI Analysis in Progress'}
             </h1>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
               {currentStep === 'choose' && 'Select what you\'d like to improve today'}
-              {currentStep === 'upload' && `Upload your ${selectedOption === 'interview' ? 'interview recording' : 'resume'} for AI analysis`}
-              {currentStep === 'analyze' && 'Our AI is analyzing your content and generating personalized feedback'}
+              {currentStep === 'upload' && 'Upload your resume for AI analysis'}
+              {currentStep === 'analyze' && 'Our AI is analyzing your resume and generating personalized feedback'}
             </p>
           </div>
 
@@ -153,7 +155,7 @@ const GetStarted: React.FC = () => {
             {currentStep === 'choose' && (
               <div className="grid md:grid-cols-2 gap-8">
                 {/* Interview Option */}
-                <InterviewButton handleOptionSelect={handleOptionSelect} />
+                <InterviewButton />
 
                 
                 {/* Resume Option */}

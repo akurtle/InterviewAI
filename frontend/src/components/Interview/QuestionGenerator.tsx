@@ -111,6 +111,41 @@ export default function QuestionGenerator({
       .map((entry) => entry.item);
   };
 
+  const normalizeCategory = (value?: string | null) => {
+    if (!value) return "general";
+    return value.toLowerCase().trim().replace(/\s+/g, "_");
+  };
+
+  const formatCategoryLabel = (value: string) => {
+    if (value === "general") return "General";
+    return value
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const groupedQuestions = useMemo(() => {
+    const map = new Map<string, Array<{ item: QuestionItem; index: number }>>();
+    questions.forEach((item, index) => {
+      const key = normalizeCategory(item.category);
+      const list = map.get(key) ?? [];
+      list.push({ item, index });
+      map.set(key, list);
+    });
+
+    const order = ["behavioral", "system_design", "technical"];
+    const extras = Array.from(map.keys())
+      .filter((key) => !order.includes(key))
+      .sort((a, b) => a.localeCompare(b));
+
+    return [...order, ...extras]
+      .filter((key) => map.has(key))
+      .map((key) => ({
+        key,
+        label: formatCategoryLabel(key),
+        items: map.get(key) ?? [],
+      }));
+  }, [questions]);
+
   useEffect(() => {
     if (interviewStatus !== "running") return;
     setNowMs(Date.now());
@@ -200,8 +235,8 @@ export default function QuestionGenerator({
   };
 
   const handleGenerate = async () => {
-    if (!role.trim() && !company.trim() && !callType.trim()) {
-      setError("Add a role, company, or call type to generate questions.");
+    if (!role.trim()) {
+      setError("Add a role to generate questions.");
       return;
     }
 
@@ -409,38 +444,50 @@ export default function QuestionGenerator({
                 )}
               </div>
             )}
-            <div className="space-y-2">
-              {questions.map((item, index) => (
-                <div
-                  key={`${index}-${item.question.slice(0, 20)}`}
-                  className="rounded-lg border border-gray-800 bg-black/40 px-3 py-2 text-sm text-gray-200"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="text-emerald-400 font-mono text-xs mt-0.5">
-                      {index + 1}
-                    </span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        {item.category && (
-                          <span className="text-[10px] uppercase tracking-wide text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                            {item.category.replace(/_/g, " ")}
+            <div className="space-y-3">
+              {groupedQuestions.map((group) => (
+                <div key={group.key} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">
+                      {group.label}
+                    </p>
+                    <span className="text-xs text-gray-500">{group.items.length} questions</span>
+                  </div>
+                  <div className="space-y-2">
+                    {group.items.map(({ item, index }) => (
+                      <div
+                        key={`${index}-${item.question.slice(0, 20)}`}
+                        className="rounded-lg border border-gray-800 bg-black/40 px-3 py-2 text-sm text-gray-200"
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="text-emerald-400 font-mono text-xs mt-0.5">
+                            {index + 1}
                           </span>
-                        )}
-                        <span className="text-sm text-gray-200">{item.question}</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              {item.category && (
+                                <span className="text-[10px] uppercase tracking-wide text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                                  {item.category.replace(/_/g, " ")}
+                                </span>
+                              )}
+                              <span className="text-sm text-gray-200">{item.question}</span>
+                            </div>
+                            {item.rationale && (
+                              <p className="mt-1 text-xs text-gray-400">{item.rationale}</p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeQuestionAt(index)}
+                            className="text-xs text-gray-500 hover:text-red-300 transition"
+                            aria-label="Remove question"
+                            title="Remove question"
+                          >
+                            x
+                          </button>
+                        </div>
                       </div>
-                      {item.rationale && (
-                        <p className="mt-1 text-xs text-gray-400">{item.rationale}</p>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeQuestionAt(index)}
-                      className="text-xs text-gray-500 hover:text-red-300 transition"
-                      aria-label="Remove question"
-                      title="Remove question"
-                    >
-                      ×
-                    </button>
+                    ))}
                   </div>
                 </div>
               ))}

@@ -6,7 +6,7 @@ import urllib.request
 import urllib.error
 import time
 
-from app.question_models import QuestionItem, QuestionRequest
+from app.questions.models import QuestionItem, QuestionRequest
 from app.config import get_settings
 
 

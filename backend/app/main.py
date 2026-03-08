@@ -12,7 +12,7 @@ from app.speech_models import SpeechSample, SpeechFeedbackResponse
 from app.video_models import VideoSample, VideoFeedbackResponse
 from app.analysis.speech_feedback import generate_feedback
 from app.analysis.video_feedback import generate_video_feedback
-from app.question_models import QuestionRequest, QuestionResponse
+from app.questions.models import QuestionRequest, QuestionResponse
 from app.questions.question_generator import generate_questions
 from app.utils.file_handler import save_upload_file, validate_file
 
