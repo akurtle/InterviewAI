@@ -53,7 +53,8 @@ Guardrails:
 
 ### Backend
 
-- `backend/app/main.py`: HTTP, WebSocket, and WebRTC entrypoint
+- `backend/app/main.py`: app factory and router registration
+- `backend/app/api/`: FastAPI routers grouped by feature
 - `backend/app/parsers/resume_parser.py`: PDF/DOCX resume extraction
 - `backend/app/questions/question_generator.py`: template and Gemini-backed question generation
 - `backend/app/analysis/speech_feedback.py`: transcript feature extraction and scoring
@@ -80,6 +81,7 @@ interview_ai/
 |   `-- tree.toml
 |-- backend/
 |   |-- app/
+|   |   |-- api/
 |   |   |-- analysis/
 |   |   |-- parsers/
 |   |   |   |-- resume_parser_helpers/
@@ -89,6 +91,7 @@ interview_ai/
 |   |   |-- config.py
 |   |   |-- main.py
 |   |   |-- models.py
+|   |   |-- realtime_state.py
 |   |   |-- speech_models.py
 |   |   `-- video_models.py
 |   |-- agents.md
@@ -110,7 +113,6 @@ interview_ai/
 
 ## Known Integration Risks
 
-- The backend still hardcodes the allowed WebSocket origin `http://localhost:3000` in `backend/app/main.py`.
 - Client-side vision metrics currently rely on browser `FaceDetector` availability, so video feedback quality varies by browser support.
 - The real-time interview path depends on heavier media and transcription packages, so environment setup is more fragile than the resume-only flow.
 

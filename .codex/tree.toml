@@ -10,12 +10,22 @@ role = "FastAPI service"
 [[node]]
 path = "backend/app/main.py"
 kind = "entrypoint"
-role = "HTTP, WebSocket, and WebRTC routes"
+role = "FastAPI app factory and router registration"
+
+[[node]]
+path = "backend/app/api"
+kind = "module"
+role = "Feature routers for core, resumes, feedback, questions, and realtime endpoints"
 
 [[node]]
 path = "backend/app/config.py"
 kind = "config"
 role = "Backend environment settings"
+
+[[node]]
+path = "backend/app/realtime_state.py"
+kind = "module"
+role = "Shared WebRTC peer connection, relay, and websocket state"
 
 [[node]]
 path = "backend/app/analysis"

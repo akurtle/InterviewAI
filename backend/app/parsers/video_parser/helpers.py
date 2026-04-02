@@ -5,20 +5,11 @@ from typing import Any, Dict
 
 import numpy as np
 from fastapi import WebSocket
-# Store websocket connections per session_id to push AI results
-
 from faster_whisper import WhisperModel
-
-from whisperlivekit import AudioProcessor, TranscriptionEngine
-
-
-transcription_engine = None
+from app.realtime_state import ws_clients
 
 
 #model = WhisperModel("tiny.en", device="cpu", compute_type="int8")  # or "cpu"
-
-
-ws_clients: Dict[str, WebSocket] = {}
 
 
 async def safe_send(session_id: str, message: Dict[str, Any]):

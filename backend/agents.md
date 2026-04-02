@@ -14,7 +14,8 @@ The backend is a FastAPI service responsible for:
 
 ## Primary Files
 
-- `app/main.py`: app entrypoint and API surface
+- `app/main.py`: app factory and router registration
+- `app/api/`: feature routers for core, resumes, feedback, questions, and realtime endpoints
 - `app/parsers/resume_parser.py`: PDF and DOCX parsing
 - `app/questions/question_generator.py`: local and Gemini-backed questions
 - `app/analysis/speech_feedback.py`: transcript scoring

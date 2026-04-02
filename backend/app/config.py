@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +13,44 @@ class Settings(BaseSettings):
         "https://generativelanguage.googleapis.com/v1beta/models/"
         "gemini-1.5-flash:generateContent"
     )
+    cors_allow_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
+    ws_allowed_origins: list[str] | None = None
+    cors_allow_methods: list[str] = Field(default_factory=lambda: ["*"])
+    cors_allow_headers: list[str] = Field(default_factory=lambda: ["*"])
+    cors_allow_credentials: bool = True
+
+    @field_validator(
+        "cors_allow_origins",
+        "ws_allowed_origins",
+        "cors_allow_methods",
+        "cors_allow_headers",
+        mode="before",
+    )
+    @classmethod
+    def _parse_list_setting(cls, value: object) -> object:
+        if value is None or isinstance(value, list):
+            return value
+
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+
+            if raw.startswith("["):
+                parsed = json.loads(raw)
+                if not isinstance(parsed, list):
+                    raise ValueError("Expected a JSON list for list-based settings.")
+                return [str(item).strip() for item in parsed if str(item).strip()]
+
+            return [item.strip() for item in raw.split(",") if item.strip()]
+
+        raise TypeError("List-based settings must be a list or string.")
+
+    @property
+    def effective_ws_allowed_origins(self) -> set[str]:
+        return set(self.ws_allowed_origins or self.cors_allow_origins)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

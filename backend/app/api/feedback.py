@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException
+
+from app.analysis.speech_feedback import generate_feedback
+from app.analysis.video_feedback import generate_video_feedback
+from app.speech_models import SpeechFeedbackResponse, SpeechSample
+from app.video_models import VideoFeedbackResponse, VideoSample
+
+
+router = APIRouter(tags=["feedback"])
+
+
+@router.post("/speech/feedback", response_model=SpeechFeedbackResponse)
+async def speech_feedback(sample: SpeechSample):
+    if not sample.text and not sample.words and not sample.segments:
+        raise HTTPException(status_code=400, detail="Provide text, words, or segments.")
+
+    text = sample.text or ""
+    if not text:
+        if sample.words:
+            text = " ".join([item.word for item in sample.words])
+        elif sample.segments:
+            text = " ".join([item.text for item in sample.segments])
+
+    word_items = None
+    if sample.words:
+        word_items = [
+            {"word": item.word, "start": item.start, "end": item.end}
+            for item in sample.words
+        ]
+
+    segment_items = None
+    if sample.segments:
+        segment_items = [
+            {"text": item.text, "start": item.start, "end": item.end}
+            for item in sample.segments
+        ]
+
+    return generate_feedback(text=text, word_items=word_items, segments=segment_items)
+
+
+@router.post("/video/feedback", response_model=VideoFeedbackResponse)
+async def video_feedback(sample: VideoSample):
+    print("\nhere\n")
+    if not sample.frames:
+        print("\nhere1\n")
+        raise HTTPException(status_code=400, detail="Provide at least one frame.")
+
+    frames = [
+        {
+            "timestamp": frame.timestamp,
+            "face_present": frame.face_present,
+            "looking_at_camera": frame.looking_at_camera,
+            "smile_prob": frame.smile_prob,
+            "head_yaw": frame.head_yaw,
+            "head_pitch": frame.head_pitch,
+        }
+        for frame in sample.frames
+    ]
+
+    return generate_video_feedback(frames=frames)

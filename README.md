@@ -16,13 +16,15 @@ The product currently supports two main workflows:
 interview_ai/
 |-- backend/
 |   |-- app/
+|   |   |-- api/                      # FastAPI routers by feature
 |   |   |-- analysis/                 # Speech/video scoring logic
 |   |   |-- parsers/                  # Resume and video helpers
 |   |   |-- questions/                # Question request models + generator
 |   |   |-- utils/                    # Upload/file validation helpers
 |   |   |-- config.py                 # Environment-driven settings
-|   |   |-- main.py                   # FastAPI app and endpoints
+|   |   |-- main.py                   # FastAPI app factory + router registration
 |   |   |-- models.py                 # Resume response models
+|   |   |-- realtime_state.py         # Shared WebRTC / WebSocket state
 |   |   |-- speech_models.py          # Speech feedback request/response models
 |   |   `-- video_models.py           # Video feedback request/response models
 |   |-- requirements.txt
@@ -135,7 +137,7 @@ These are used by the live audio/video endpoints and are now pinned in `backend/
 
 ### Backend Flow
 
-1. `app/main.py` creates the FastAPI application and all HTTP/WebSocket endpoints.
+1. `app/main.py` creates the FastAPI application and registers feature routers.
 2. `ResumeParser` handles PDF/DOCX extraction and resume field parsing.
 3. `generate_questions()` creates question sets from local templates or Gemini.
 4. `generate_feedback()` scores transcript quality using rule-based features and a linear model.
@@ -384,6 +386,8 @@ The backend reads `.env` values through `pydantic-settings`. The main optional s
 GEMINI_API_KEY=your_key_here
 GEMINI_MODEL=gemini-1.5-flash
 GEMINI_API_URL=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent
+CORS_ALLOW_ORIGINS=["http://localhost:3000"]
+WS_ALLOWED_ORIGINS=["http://localhost:3000"]
 ```
 
 Optional resume parsing overrides:
@@ -438,7 +442,7 @@ curl -X POST http://localhost:8000/speech/feedback \
 
 - The frontend now routes backend calls through `VITE_API_BASE` and `VITE_WS_BASE`.
 - `frontend/vite.config.ts` defines an `/api` proxy, but the current frontend code calls the backend through explicit absolute URLs, so that proxy is not currently used.
-- The backend allows permissive CORS for HTTP requests, but the results WebSocket additionally checks for `http://localhost:3000`.
+- The backend CORS list and WebSocket allowed origins are configured through `backend/app/config.py` and can be overridden with environment variables.
 - The `run_video_pipeline()` function currently only sends a basic status message. Most video scoring in practice comes from client-collected frames posted later to `/video/feedback`.
 - Client-side video feedback now sends metric-shaped frames that match the backend schema instead of raw base64 image data.
 - `backend/app/parsers/resume_parser.py` will attempt to download the spaCy model automatically if it is missing, but installing it manually is more predictable for local setup and CI.
@@ -456,7 +460,8 @@ curl -X POST http://localhost:8000/speech/feedback \
 
 ### Backend
 
-- `backend/app/main.py` - API and WebSocket entrypoint
+- `backend/app/main.py` - app factory and router registration
+- `backend/app/api/` - feature routers for core, resumes, questions, feedback, and realtime endpoints
 - `backend/app/parsers/resume_parser.py` - resume parsing logic
 - `backend/app/questions/question_generator.py` - question generation
 - `backend/app/analysis/speech_feedback.py` - transcript scoring
@@ -468,7 +473,6 @@ curl -X POST http://localhost:8000/speech/feedback \
 This codebase is already useful for local experimentation and demos, but it still has some rough edges:
 
 - some pages are placeholders
-- the WebSocket origin check is still hardcoded for local development
 - browser-dependent vision sampling still needs stronger cross-browser support
 - video streaming is only partially implemented server-side
 
