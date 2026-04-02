@@ -3,6 +3,25 @@ import React, { useRef, useState, useEffect } from "react";
 type RecordMode = "audio" | "video" | "both";
 type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
 
+type DetectedFace = {
+  boundingBox?: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  };
+};
+
+type FaceDetectorLike = {
+  detect: (input: CanvasImageSource) => Promise<DetectedFace[]>;
+};
+
+declare global {
+  interface Window {
+    FaceDetector?: new (options?: { fastMode?: boolean; maxDetectedFaces?: number }) => FaceDetectorLike;
+  }
+}
+
 interface SignalAnswer {
   sdp: string;
   type: RTCSdpType;
@@ -30,6 +49,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   const visionIntervalRef = useRef<number | null>(null);
   const visionBusyRef = useRef(false);
   const visionEnabledRef = useRef(false);
+  const faceDetectorRef = useRef<FaceDetectorLike | null>(null);
 
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +61,23 @@ const WebRTCRecorder: React.FC<Props> = ({
   const updateStatus = (newStatus: ConnectionStatus) => {
     setStatus(newStatus);
     onStatusChange?.(newStatus);
+  };
+
+  const getFaceDetector = () => {
+    if (faceDetectorRef.current) {
+      return faceDetectorRef.current;
+    }
+
+    const FaceDetectorCtor = window.FaceDetector;
+    if (!FaceDetectorCtor) {
+      return null;
+    }
+
+    faceDetectorRef.current = new FaceDetectorCtor({
+      fastMode: true,
+      maxDetectedFaces: 1,
+    });
+    return faceDetectorRef.current;
   };
 
   const startSession = async () => {
@@ -134,6 +171,16 @@ const WebRTCRecorder: React.FC<Props> = ({
         if (!canvasRef.current) {
           canvasRef.current = document.createElement("canvas");
         }
+        const detector = getFaceDetector();
+        if (!detector) {
+          onVisionData?.({
+            type: "vision_status",
+            source: "client",
+            message: "Browser face detection is unavailable. Video feedback metrics were not captured.",
+          });
+          visionEnabledRef.current = false;
+          return;
+        }
         visionEnabledRef.current = true;
         if (visionIntervalRef.current) {
           window.clearInterval(visionIntervalRef.current);
@@ -157,19 +204,54 @@ const WebRTCRecorder: React.FC<Props> = ({
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext("2d");
-          if (!ctx) return;
+          if (!ctx) {
+            visionBusyRef.current = false;
+            return;
+          }
           ctx.drawImage(video, 0, 0, width, height);
 
-          const image_base64 = canvas.toDataURL("image/jpeg", 0.7);
-          onVisionData?.({
-            type: "frame",
-            frame: {
-              timestamp: Date.now(),
-              image_base64,
-            },
-            source: "client",
-          });
-          visionBusyRef.current = false;
+          try {
+            const faces = await detector.detect(canvas);
+            const primaryFace = faces[0]?.boundingBox;
+            const facePresent = Boolean(primaryFace);
+
+            let headYaw: number | null = null;
+            let headPitch: number | null = null;
+            let lookingAtCamera = false;
+
+            if (primaryFace) {
+              const faceCenterX = ((primaryFace.x ?? 0) + (primaryFace.width ?? 0) / 2) / width;
+              const faceCenterY = ((primaryFace.y ?? 0) + (primaryFace.height ?? 0) / 2) / height;
+              const horizontalOffset = faceCenterX - 0.5;
+              const verticalOffset = faceCenterY - 0.5;
+
+              headYaw = Math.max(-30, Math.min(30, horizontalOffset * 120));
+              headPitch = Math.max(-20, Math.min(20, verticalOffset * 90));
+              lookingAtCamera = Math.abs(horizontalOffset) <= 0.1 && Math.abs(verticalOffset) <= 0.12;
+            }
+
+            onVisionData?.({
+              type: "frame",
+              frame: {
+                timestamp: Date.now() / 1000,
+                face_present: facePresent,
+                looking_at_camera: lookingAtCamera,
+                smile_prob: null,
+                head_yaw: headYaw,
+                head_pitch: headPitch,
+              },
+              source: "client",
+            });
+          } catch (visionError) {
+            console.error("Vision sampling error:", visionError);
+            onVisionData?.({
+              type: "vision_status",
+              source: "client",
+              message: "Vision metric extraction failed for a sampled frame.",
+            });
+          } finally {
+            visionBusyRef.current = false;
+          }
         }, 800);
       }
     } catch (e: any) {

@@ -1,0 +1,88 @@
+[tree]
+root = "interview_ai"
+description = "Curated high-signal project tree for orientation."
+
+[[node]]
+path = "backend"
+kind = "app"
+role = "FastAPI service"
+
+[[node]]
+path = "backend/app/main.py"
+kind = "entrypoint"
+role = "HTTP, WebSocket, and WebRTC routes"
+
+[[node]]
+path = "backend/app/config.py"
+kind = "config"
+role = "Backend environment settings"
+
+[[node]]
+path = "backend/app/analysis"
+kind = "module"
+role = "Speech and video scoring logic"
+
+[[node]]
+path = "backend/app/parsers"
+kind = "module"
+role = "Resume parsing and video pipeline helpers"
+
+[[node]]
+path = "backend/app/questions"
+kind = "module"
+role = "Question request models and generation logic"
+
+[[node]]
+path = "frontend"
+kind = "app"
+role = "React client"
+
+[[node]]
+path = "frontend/src/main.tsx"
+kind = "entrypoint"
+role = "Vite bootstrap"
+
+[[node]]
+path = "frontend/src/App.tsx"
+kind = "entrypoint"
+role = "Route registration"
+
+[[node]]
+path = "frontend/src/pages"
+kind = "module"
+role = "Top-level screens"
+
+[[node]]
+path = "frontend/src/components/Interview"
+kind = "module"
+role = "Live interview UI, recorder, questions, and feedback"
+
+[[node]]
+path = "frontend/src/components/parsers"
+kind = "module"
+role = "Resume upload and analysis UI"
+
+[[node]]
+path = "frontend/src/hooks"
+kind = "module"
+role = "Session mode and feedback request hooks"
+
+[[relationship]]
+from = "frontend/src/pages/GetStarted.tsx"
+to = "backend/app/main.py"
+reason = "Resume upload posts to parse-resume endpoint"
+
+[[relationship]]
+from = "frontend/src/pages/MockInterview.tsx"
+to = "backend/app/main.py"
+reason = "Mock interview consumes ASR, WebRTC, question, and feedback endpoints"
+
+[[relationship]]
+from = "frontend/src/hooks/useFeedbackRequests.ts"
+to = "backend/app/speech_models.py"
+reason = "Speech feedback payload contract"
+
+[[relationship]]
+from = "frontend/src/hooks/useFeedbackRequests.ts"
+to = "backend/app/video_models.py"
+reason = "Video feedback payload contract"

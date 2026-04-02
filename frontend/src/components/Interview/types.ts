@@ -9,5 +9,9 @@ export type TranscriptItem = {
 
 export type VisionFrame = {
   timestamp: number;
-  image_base64: string;
+  face_present: boolean;
+  looking_at_camera: boolean;
+  smile_prob?: number | null;
+  head_yaw?: number | null;
+  head_pitch?: number | null;
 };

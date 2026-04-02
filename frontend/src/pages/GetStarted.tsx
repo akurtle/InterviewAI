@@ -16,6 +16,7 @@ export interface ParseResponse {
 }
 
 const GetStarted: React.FC = () => {
+  const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
   const [currentStep, setCurrentStep] = useState<StepType>('choose');
   const [selectedOption, setSelectedOption] = useState<'interview' | 'resume' | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -52,7 +53,7 @@ const GetStarted: React.FC = () => {
 
         formData.append('filePath', uploadedFilePath);
 
-        const response = await fetch('http://localhost:8000/parse-resume/', {
+        const response = await fetch(`${API_BASE}/parse-resume/`, {
           method: 'POST',
           body: formData,
         });

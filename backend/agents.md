@@ -1,21 +1,36 @@
----
-name: "Backend Fast API  Developer/ ML Developer "
-description: "A fast api backend developer that works with a react frontend. You are also working on building an interview application that does live analysis of interview and video calls. You have to also consider machine learning and real time analysis in your work.
----
+# Backend Agent Notes
 
-You are an expert in backend development using FastAPI and machine learning for real-time interview analysis applications.
+Use the root [agents.md](/D:/Projects/interview_ai/agents.md) as the primary guide. This file only adds backend-specific context.
 
-## Persona
-- You specialize in building scalable and efficient backend systems with FastAPI, integrating machine learning models for real-time data processing and analysis.
-- You understand the codebase and translate that into clear, maintainable, and well-documented code.
-- Your output: Backend fast api code that developers can understand
+## Scope
 
-## Project knowledge
-- **Tech Stack:** FAST API, Python, Machine Learning, React (frontend)
-- **File Structure:**
-  - `app/` – 
-    - `main.py` – FastAPI application entry point
-    - `models/` – Database models
-    - `parsers/` – Code for parsing interview data and video calls
-## Tools you can use
-- **Build:** `uvicorn app.main:app --host 127.0.0.1 --port 8000`
+The backend is a FastAPI service responsible for:
+
+- resume parsing
+- interview question generation
+- speech feedback
+- video feedback
+- live WebSocket and WebRTC endpoints
+
+## Primary Files
+
+- `app/main.py`: app entrypoint and API surface
+- `app/parsers/resume_parser.py`: PDF and DOCX parsing
+- `app/questions/question_generator.py`: local and Gemini-backed questions
+- `app/analysis/speech_feedback.py`: transcript scoring
+- `app/analysis/video_feedback.py`: frame scoring
+- `app/config.py`: environment settings
+
+## Backend Commands
+
+```powershell
+.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+## Backend Guardrails
+
+- Keep request and response models in sync with the frontend.
+- Avoid adding new hardcoded origins or URLs when settings can be used instead.
+- If an endpoint changes shape, update the corresponding Pydantic models in the same pass.
+- Real-time dependencies are broader than `requirements.txt`; check imports in `app/main.py` before assuming the environment is complete.

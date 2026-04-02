@@ -1,0 +1,56 @@
+[project]
+name = "interview_ai"
+type = "fullstack"
+summary = "FastAPI backend plus React/Vite frontend for resume analysis and mock interview practice."
+default_frontend = "frontend"
+default_backend = "backend"
+
+[focus]
+primary_apps = ["backend", "frontend"]
+prefer_small_changes = true
+protect_api_contracts = true
+env_first_configuration = true
+
+[paths]
+frontend_root = "frontend"
+backend_root = "backend"
+frontend_src = "frontend/src"
+backend_src = "backend/app"
+
+[ignore]
+directories = [
+  ".git",
+  ".vite",
+  "frontend/node_modules",
+  "backend/.venv",
+  "backend/app/__pycache__",
+]
+
+[entrypoints]
+frontend = "frontend/src/App.tsx"
+frontend_main = "frontend/src/main.tsx"
+backend = "backend/app/main.py"
+backend_settings = "backend/app/config.py"
+
+[commands.frontend]
+dev = "npm run dev"
+build = "npm run build"
+lint = "npm run lint"
+
+[commands.backend]
+serve = "uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
+
+[checks]
+preferred_after_frontend_changes = ["npm run build", "npm run lint"]
+preferred_after_backend_changes = ["uvicorn app.main:app --host 127.0.0.1 --port 8000"]
+
+[contracts]
+speech_feedback = "frontend/src/hooks/useFeedbackRequests.ts <-> backend/app/speech_models.py"
+video_feedback = "frontend/src/hooks/useFeedbackRequests.ts <-> backend/app/video_models.py"
+questions = "frontend interview question UI <-> backend/app/questions/question_generator.py"
+resume_parse = "frontend/src/pages/GetStarted.tsx <-> backend/app/main.py"
+
+[notes]
+resume_upload_has_hardcoded_url = true
+video_feedback_schema_currently_misaligned = true
+realtime_dependencies_not_fully_pinned = true

@@ -43,6 +43,22 @@ interview_ai/
 `-- README.md
 ```
 
+## Agent And Repo Workflow
+
+- [agents.md](/D:/Projects/interview_ai/agents.md) is the root guidance file for repository-aware coding agents.
+- `.codex/config.toml` stores project-specific navigation and workflow hints.
+- `.codex/tree.toml` stores a curated source tree and key cross-app relationships.
+
+If you want to finalize a change set with git, use the standard non-interactive flow:
+
+```bash
+git add .
+git commit -m "Describe the change"
+git push
+```
+
+Review `git status` before committing so unrelated work is not included by accident.
+
 ## What The App Does
 
 ### Resume Analysis
@@ -100,7 +116,7 @@ The backend code also imports libraries used by the real-time interview flow:
 - `faster-whisper`
 - `numpy`
 
-These are used by the live audio/video endpoints, but they are not currently pinned in `backend/requirements.txt`. If you want the real-time interview flow to work locally, install them explicitly.
+These are used by the live audio/video endpoints and are now pinned in `backend/requirements.txt`.
 
 ## Architecture Overview
 
@@ -325,12 +341,6 @@ Install the pinned backend packages:
 pip install -r requirements.txt
 ```
 
-Install the additional packages used by the real-time interview features:
-
-```bash
-pip install aiortc whisperlivekit faster-whisper numpy
-```
-
 Install the spaCy English model:
 
 ```bash
@@ -426,11 +436,11 @@ curl -X POST http://localhost:8000/speech/feedback \
 
 ## Important Implementation Notes
 
-- The frontend mostly uses `VITE_API_BASE` and `VITE_WS_BASE`, but the resume upload flow in `GetStarted.tsx` currently posts directly to `http://localhost:8000/parse-resume/`.
+- The frontend now routes backend calls through `VITE_API_BASE` and `VITE_WS_BASE`.
 - `frontend/vite.config.ts` defines an `/api` proxy, but the current frontend code calls the backend through explicit absolute URLs, so that proxy is not currently used.
 - The backend allows permissive CORS for HTTP requests, but the results WebSocket additionally checks for `http://localhost:3000`.
 - The `run_video_pipeline()` function currently only sends a basic status message. Most video scoring in practice comes from client-collected frames posted later to `/video/feedback`.
-- Some imported real-time dependencies are missing from `backend/requirements.txt`.
+- Client-side video feedback now sends metric-shaped frames that match the backend schema instead of raw base64 image data.
 - `backend/app/parsers/resume_parser.py` will attempt to download the spaCy model automatically if it is missing, but installing it manually is more predictable for local setup and CI.
 
 ## Key Files To Know
@@ -457,9 +467,9 @@ curl -X POST http://localhost:8000/speech/feedback \
 
 This codebase is already useful for local experimentation and demos, but it still has some rough edges:
 
-- real-time dependencies should be formalized in backend install metadata
 - some pages are placeholders
-- environment-variable usage is not fully consistent across frontend flows
+- the WebSocket origin check is still hardcoded for local development
+- browser-dependent vision sampling still needs stronger cross-browser support
 - video streaming is only partially implemented server-side
 
 For local development, the project is best treated as a working prototype with a clear frontend/backend split and reasonably self-contained feature modules.

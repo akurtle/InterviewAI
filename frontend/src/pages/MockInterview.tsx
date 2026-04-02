@@ -10,6 +10,44 @@ import type { RecordMode, TranscriptItem, VisionFrame } from "../components/Inte
 import { useSessionType } from "../hooks/useSessionType";
 import { useFeedbackRequests } from "../hooks/useFeedbackRequests";
 
+const parseTimestampSeconds = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 1e11 ? value / 1000 : value;
+  }
+
+  if (typeof value === "string") {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric > 1e11 ? numeric / 1000 : numeric;
+    }
+
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed / 1000;
+    }
+  }
+
+  return Date.now() / 1000;
+};
+
+const parseOptionalBoolean = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return null;
+};
+
+const parseOptionalNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
 const MockInterview: React.FC = () => {
   const [recordMode, setRecordMode] = useState<RecordMode>("both");
   const [connectionStatus, setConnectionStatus] = useState<string>("idle");
@@ -73,29 +111,37 @@ const MockInterview: React.FC = () => {
       data.payload ??
       data.data ??
       data;
-    const imageBase64 =
-      frame.image_base64 ?? frame.imageBase64 ?? frame.image ?? frame.data_url ?? frame.dataUrl;
-    if (!imageBase64) return null;
 
-    let timestamp: number | null = null;
-    if (frame.timestamp !== undefined) {
-      const numeric = Number(frame.timestamp);
-      if (Number.isFinite(numeric)) {
-        timestamp = numeric;
-      } else if (typeof frame.timestamp === "string") {
-        const parsed = Date.parse(frame.timestamp);
-        if (!Number.isNaN(parsed)) {
-          timestamp = parsed;
-        }
-      }
+    const facePresent =
+      parseOptionalBoolean(frame.face_present ?? frame.facePresent) ??
+      [
+        frame.looking_at_camera,
+        frame.lookingAtCamera,
+        frame.smile_prob,
+        frame.smileProb,
+        frame.head_yaw,
+        frame.headYaw,
+        frame.head_pitch,
+        frame.headPitch,
+      ].some((value) => value !== undefined && value !== null);
+
+    if (!facePresent && parseOptionalBoolean(frame.face_present ?? frame.facePresent) === null) {
+      return null;
     }
-    if (timestamp === null) {
-      timestamp = Date.now();
-    }
+
+    const lookingAtCamera =
+      parseOptionalBoolean(frame.looking_at_camera ?? frame.lookingAtCamera) ?? false;
+    const smileProb = parseOptionalNumber(frame.smile_prob ?? frame.smileProb);
+    const headYaw = parseOptionalNumber(frame.head_yaw ?? frame.headYaw);
+    const headPitch = parseOptionalNumber(frame.head_pitch ?? frame.headPitch);
 
     return {
-      timestamp,
-      image_base64: imageBase64,
+      timestamp: parseTimestampSeconds(frame.timestamp),
+      face_present: facePresent,
+      looking_at_camera: facePresent ? lookingAtCamera : false,
+      smile_prob: smileProb,
+      head_yaw: headYaw,
+      head_pitch: headPitch,
     };
   };
 
