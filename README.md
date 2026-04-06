@@ -388,6 +388,24 @@ To enable per-user persistence:
 3. Run the SQL in `supabase/schema.sql` inside the Supabase SQL editor.
 4. Restart the frontend dev server.
 
+## GitHub Actions
+
+The repository includes two GitHub Actions workflows under `.github/workflows`:
+
+- `ci.yml` runs on pushes to `main` and on pull requests. It:
+  - installs frontend dependencies with `npm ci`
+  - runs `npm run lint`
+  - runs `npm run build`
+  - installs backend dependencies from `backend/requirements.txt`
+  - compiles `backend/app` with `python -m compileall`
+  - smoke-tests the FastAPI app import with `from app.main import app`
+- `dependency-review.yml` runs on pull requests and uses GitHub's dependency review action to flag risky dependency changes before merge.
+
+The CI workflow currently targets:
+
+- Node.js `20`
+- Python `3.10`
+
 ### Backend
 
 The backend reads `.env` values through `pydantic-settings`. The main optional settings are:
