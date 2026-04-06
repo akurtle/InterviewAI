@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../auth';
 
 function Navbar() {
+  const { user, signOut } = useAuth();
+
   return (
     <nav className="theme-nav fixed top-0 z-50 w-full border-b backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-6 py-4">
@@ -43,9 +46,24 @@ function Navbar() {
             >
               Settings
             </Link>
-            <button className="theme-ghost-link transition">
-              Log In
-            </button>
+            {user ? (
+              <>
+                <Link to="/account" className="theme-ghost-link transition">
+                  Account
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="theme-ghost-link transition"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <Link to="/auth" className="theme-ghost-link transition">
+                Log In
+              </Link>
+            )}
             <Link 
               to="/get-started"
               className="theme-button-primary rounded-lg px-6 py-2"

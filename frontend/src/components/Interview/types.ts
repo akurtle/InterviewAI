@@ -1,6 +1,12 @@
 export type RecordMode = "video" | "audio" | "both";
 export type FeedbackStatus = "idle" | "loading" | "ready" | "error";
 
+export type GeneratedQuestion = {
+  category?: string | null;
+  question: string;
+  rationale?: string | null;
+};
+
 export type TranscriptItem = {
   text: string;
   isFinal: boolean;

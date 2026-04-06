@@ -1,5 +1,3 @@
-import React from 'react'
-
 function FeaturesMiniSection() {
   return (
      <div className="mt-20 grid md:grid-cols-3 gap-6">

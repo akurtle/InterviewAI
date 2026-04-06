@@ -10,6 +10,16 @@ type FeedbackHookArgs = {
   visionFrames: VisionFrame[];
 };
 
+export type FeedbackRequestResult = {
+  sessionTranscripts: TranscriptItem[];
+  sessionText: string;
+  sessionFrames: VisionFrame[];
+  speechFeedback: any | null;
+  videoFeedback: any | null;
+  speechStatus: FeedbackStatus;
+  videoStatus: FeedbackStatus;
+};
+
 export const useFeedbackRequests = ({
   apiBase,
   speechEndpoint,
@@ -69,10 +79,12 @@ export const useFeedbackRequests = ({
         setSpeechFeedback(data);
         setSpeechFeedbackStatus("ready");
         lastSpeechSentRef.current = speechKey;
+        return data;
       } catch (error: any) {
         console.error("Speech feedback error:", error);
         setSpeechFeedbackStatus("error");
         setFeedbackError(error?.message ?? "Failed to fetch speech feedback.");
+        return null;
       }
     },
     [apiBase, speechEndpoint]
@@ -98,16 +110,18 @@ export const useFeedbackRequests = ({
         setVideoFeedback(data);
         setVideoFeedbackStatus("ready");
         lastVideoSentRef.current = totalFrameCount;
+        return data;
       } catch (error: any) {
         console.error("Video feedback error:", error);
         setVideoFeedbackStatus("error");
         setFeedbackError(error?.message ?? "Failed to fetch video feedback.");
+        return null;
       }
     },
     [apiBase, videoEndpoint]
   );
 
-  const requestFeedback = useCallback(async () => {
+  const requestFeedback = useCallback(async (): Promise<FeedbackRequestResult | null> => {
     const sessionTranscripts = transcriptsRef.current.slice(
       sessionStartRef.current.transcriptIndex
     );
@@ -122,24 +136,47 @@ export const useFeedbackRequests = ({
     const totalFrameCount = visionFramesRef.current.length;
     const speechKey = `${sessionStartRef.current.transcriptIndex}:${sessionText}`;
 
-    const requests: Array<Promise<void>> = [];
+    let nextSpeechFeedback: any | null = null;
+    let nextVideoFeedback: any | null = null;
+    let nextSpeechStatus: FeedbackStatus = "idle";
+    let nextVideoStatus: FeedbackStatus = "idle";
 
     if (sessionText && speechKey !== lastSpeechSentRef.current) {
-      requests.push(requestSpeechFeedback(sessionText, speechKey));
+      nextSpeechFeedback = await requestSpeechFeedback(sessionText, speechKey);
+      nextSpeechStatus = nextSpeechFeedback ? "ready" : "error";
     } else if (!sessionText) {
       setSpeechFeedbackStatus("idle");
+      nextSpeechStatus = "idle";
+    } else {
+      nextSpeechFeedback = speechFeedback;
+      nextSpeechStatus = speechFeedback ? "ready" : "idle";
     }
 
     if (sessionFrames.length > 0 && totalFrameCount !== lastVideoSentRef.current) {
-      requests.push(requestVideoFeedback(sessionFrames, totalFrameCount));
+      nextVideoFeedback = await requestVideoFeedback(sessionFrames, totalFrameCount);
+      nextVideoStatus = nextVideoFeedback ? "ready" : "error";
     } else if (sessionFrames.length === 0) {
       setVideoFeedbackStatus("idle");
+      nextVideoStatus = "idle";
+    } else {
+      nextVideoFeedback = videoFeedback;
+      nextVideoStatus = videoFeedback ? "ready" : "idle";
     }
 
-    if (requests.length > 0) {
-      await Promise.all(requests);
+    if (!sessionText && sessionFrames.length === 0) {
+      return null;
     }
-  }, [requestSpeechFeedback, requestVideoFeedback]);
+
+    return {
+      sessionTranscripts,
+      sessionText,
+      sessionFrames,
+      speechFeedback: nextSpeechFeedback,
+      videoFeedback: nextVideoFeedback,
+      speechStatus: nextSpeechStatus,
+      videoStatus: nextVideoStatus,
+    };
+  }, [requestSpeechFeedback, requestVideoFeedback, speechFeedback, videoFeedback]);
 
   return {
     speechFeedback,

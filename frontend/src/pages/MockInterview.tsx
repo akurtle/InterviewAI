@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import WebRTCRecorder from "../components/Interview/WebRTCRecorder";
@@ -6,10 +6,12 @@ import { useWhisperWS } from "../components/Interview/useWhisper";
 import QuestionGenerator from "../components/Interview/QuestionGenerator";
 import FeedbackPanel from "../components/Interview/FeedbackPanel";
 import SettingsModal from "../components/Interview/SettingsModal";
-import type { RecordMode, TranscriptItem, VisionFrame } from "../components/Interview/types";
+import type { GeneratedQuestion, RecordMode, TranscriptItem, VisionFrame } from "../components/Interview/types";
+import { useAuth } from "../auth";
 import { useSessionType } from "../hooks/useSessionType";
 import { useFeedbackRequests } from "../hooks/useFeedbackRequests";
 import { getApiBase, getWsBase } from "../network";
+import { saveInterviewSession, type SessionQuestionContext } from "../sessionStore";
 
 const parseTimestampSeconds = (value: unknown): number => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -49,7 +51,7 @@ const parseOptionalNumber = (value: unknown): number | null => {
   return null;
 };
 
-const MockInterview: React.FC = () => {
+const MockInterview = () => {
   const [recordMode, setRecordMode] = useState<RecordMode>("both");
   const [connectionStatus, setConnectionStatus] = useState<string>("idle");
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
@@ -57,6 +59,14 @@ const MockInterview: React.FC = () => {
   const [visionData, setVisionData] = useState<any>(null);
   const [visionFrames, setVisionFrames] = useState<VisionFrame[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
+  const [questionContext, setQuestionContext] = useState<SessionQuestionContext>({
+    role: "",
+    company: "",
+    callType: "",
+  });
+  const [sessionSaveStatus, setSessionSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [sessionSaveMessage, setSessionSaveMessage] = useState<string | null>(null);
   const [activeQuestion, setActiveQuestion] = useState<{
     text: string;
     index: number;
@@ -65,9 +75,12 @@ const MockInterview: React.FC = () => {
 
   const prevConnectionStatusRef = useRef(connectionStatus);
   const prevAudioRunningRef = useRef(false);
+  const sessionStartedAtRef = useRef<number | null>(null);
+  const persistedSessionKeyRef = useRef<string>("");
   const API_BASE = getApiBase();
   const WS_BASE = getWsBase();
-  const { endpoints } = useSessionType();
+  const { endpoints, sessionType } = useSessionType();
+  const { user, isConfigured: isSupabaseConfigured } = useAuth();
 
   const handleTranscript = (text: string, isFinal: boolean) => {
     // console.log("Transcript:", text, "Final:", isFinal);
@@ -101,6 +114,15 @@ const MockInterview: React.FC = () => {
 
   const triggerInterviewStart = () => {
     setInterviewStartSignal((prev) => prev + 1);
+  };
+
+  const beginSession = () => {
+    sessionStartedAtRef.current = Date.now();
+    persistedSessionKeyRef.current = "";
+    setSessionSaveStatus("idle");
+    setSessionSaveMessage(null);
+    markSessionStart();
+    triggerInterviewStart();
   };
 
   const normalizeVisionFrame = (data: any): VisionFrame | null => {
@@ -185,9 +207,54 @@ const MockInterview: React.FC = () => {
       stopAudio();
       return;
     }
-    markSessionStart();
-    triggerInterviewStart();
+    beginSession();
     await startAudio();
+  };
+
+  const persistSession = async () => {
+    const feedbackResult = await requestFeedback();
+    if (!feedbackResult) return;
+    if (!user || !isSupabaseConfigured) return;
+
+    const fingerprint = JSON.stringify({
+      startedAt: sessionStartedAtRef.current,
+      transcriptCount: feedbackResult.sessionTranscripts.length,
+      frameCount: feedbackResult.sessionFrames.length,
+      sessionText: feedbackResult.sessionText,
+    });
+
+    if (persistedSessionKeyRef.current === fingerprint) {
+      return;
+    }
+
+    setSessionSaveStatus("saving");
+    setSessionSaveMessage("Saving session to your account...");
+
+    try {
+      await saveInterviewSession({
+        userId: user.id,
+        sessionType,
+        recordMode,
+        questionContext,
+        questions: generatedQuestions,
+        transcripts: feedbackResult.sessionTranscripts,
+        visionFrames: feedbackResult.sessionFrames,
+        speechFeedback: feedbackResult.speechFeedback,
+        videoFeedback: feedbackResult.videoFeedback,
+        startedAt: new Date(sessionStartedAtRef.current ?? Date.now()).toISOString(),
+        endedAt: new Date().toISOString(),
+      });
+
+      persistedSessionKeyRef.current = fingerprint;
+      setSessionSaveStatus("saved");
+      setSessionSaveMessage("Session saved to your account.");
+    } catch (error) {
+      console.error("Session persistence failed:", error);
+      setSessionSaveStatus("error");
+      setSessionSaveMessage(
+        error instanceof Error ? error.message : "Failed to save session."
+      );
+    }
   };
 
   useEffect(() => {
@@ -223,7 +290,7 @@ const MockInterview: React.FC = () => {
     }
 
     if (prevAudioRunningRef.current && !isAudioRunning) {
-      void requestFeedback();
+      void persistSession();
     }
 
     prevAudioRunningRef.current = isAudioRunning;
@@ -238,15 +305,14 @@ const MockInterview: React.FC = () => {
     const prevStatus = prevConnectionStatusRef.current;
     if (prevStatus !== connectionStatus) {
       if (prevStatus === "idle" && connectionStatus === "connecting") {
-        markSessionStart();
-        triggerInterviewStart();
+        beginSession();
       }
 
       if (
         (prevStatus === "connected" || prevStatus === "connecting") &&
         (connectionStatus === "idle" || connectionStatus === "disconnected" || connectionStatus === "error")
       ) {
-        void requestFeedback();
+        void persistSession();
       }
     }
 
@@ -297,6 +363,39 @@ const MockInterview: React.FC = () => {
             >
               Open settings
             </button>
+          </div>
+
+          <div className="mb-6">
+            {user ? (
+              <div className="theme-panel-soft rounded-2xl p-4">
+                <p className="theme-text-primary text-sm font-semibold">
+                  Signed in as {user.email}
+                </p>
+                <p className="theme-text-muted mt-1 text-sm">
+                  Completed sessions are saved automatically after feedback is generated.
+                </p>
+                {sessionSaveMessage && (
+                  <p
+                    className={`mt-2 text-sm ${
+                      sessionSaveStatus === "error"
+                        ? "text-red-300"
+                        : sessionSaveStatus === "saved"
+                          ? "text-emerald-300"
+                          : "theme-text-muted"
+                    }`}
+                  >
+                    {sessionSaveMessage}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="theme-panel-soft rounded-2xl p-4">
+                <p className="theme-text-primary text-sm font-semibold">Session saving is off</p>
+                <p className="theme-text-muted mt-1 text-sm">
+                  Sign in with Supabase auth to store per-user session history in Postgres.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className={`grid gap-8 ${recordMode === "audio" ? "lg:grid-cols-1 max-w-4xl mx-auto" : "lg:grid-cols-3"}`}>
@@ -393,6 +492,8 @@ const MockInterview: React.FC = () => {
               <QuestionGenerator
                 apiBase={API_BASE}
                 endpointPath={endpoints.questions}
+                onQuestions={(questions) => setGeneratedQuestions(questions)}
+                onInputChange={(inputs) => setQuestionContext(inputs)}
                 transcripts={transcripts}
                 startSignal={interviewStartSignal}
                 onCurrentQuestionChange={(question, index, total) => {

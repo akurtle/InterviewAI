@@ -1,15 +1,5 @@
-// useWhisperWS.ts
 import { useRef, useState } from "react";
 import { getWsBase, openWebSocketWithLoopbackFallback } from "../../network";
-
-
-
-//  Helps create that connection between REact and fast api by creating web sockets
-
-type WlkMessage =
-  | { type: "partial"; text: string }
-  | { type: "final"; text: string }
-  | { type: string;[k: string]: any };
 
 type WhisperStatus = "idle" | "connecting" | "connected" | "recording" | "error";
 
@@ -26,7 +16,7 @@ export function useWhisperWS(
   const mediaRef = useRef<MediaRecorder | null>(null);
   const lastWordsRef = useRef<string[]>([]);
 
-  const [partial, setPartial] = useState("");
+  const [partial] = useState("");
   const [finals, setFinals] = useState<string>("");
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState<WhisperStatus>("idle");
@@ -37,7 +27,6 @@ export function useWhisperWS(
   };
 
   const start = async () => {
-    console.log("started")
     try {
       updateStatus("connecting");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -47,45 +36,29 @@ export function useWhisperWS(
       wsRef.current = ws;
       ws.addEventListener("error", () => updateStatus("error"));
 
-      const overlapLen = (prev: string[], next: string[], max = 20) => {
-        const maxK = Math.min(prev.length, next.length, max);
-        for (let k = maxK; k >= 1; k--) {
-          let ok = true;
-          for (let i = 0; i < k; i++) {
-            if (prev[prev.length - k + i] !== next[i]) {
-              ok = false;
-              break;
-            }
-          }
-          if (ok) return k;
-        }
-        return 0;
-      };
-
-        ws.onmessage = (ev) => {
-        const data = JSON.parse(String(ev.data));
+      ws.onmessage = (event) => {
+        const data = JSON.parse(String(event.data));
         const words = data.words ?? [];
-        const delta = words.map((w: any) => w.word).join(" ").trim();
+        const delta = words.map((word: { word?: string }) => word.word ?? "").join(" ").trim();
         if (!delta) return;
 
-        setFinals((prev) => (prev ? prev + " " + delta : delta));
+        setFinals((prev) => (prev ? `${prev} ${delta}` : delta));
         callbacks?.onTranscript?.(delta, true);
       };
 
       updateStatus("connected");
 
-      // webm/opus chunks are what WLK’s web UI uses (server decodes via FFmpeg by default) :contentReference[oaicite:2]{index=2}
-      const rec = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-      mediaRef.current = rec;
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      mediaRef.current = recorder;
 
-      rec.ondataavailable = async (e) => {
-        if (!e.data || e.data.size === 0) return;
+      recorder.ondataavailable = async (event) => {
+        if (!event.data || event.data.size === 0) return;
         if (ws.readyState !== WebSocket.OPEN) return;
-        const buf = await e.data.arrayBuffer();
-        ws.send(buf); // send bytes
+        const buffer = await event.data.arrayBuffer();
+        ws.send(buffer);
       };
 
-      rec.start(250); // chunk every 250ms (tune 100–500ms)
+      recorder.start(250);
       setIsRunning(true);
       updateStatus("recording");
     } catch (error) {
@@ -95,11 +68,9 @@ export function useWhisperWS(
   };
 
   const stop = () => {
-
-    console.log("stopped")
     setIsRunning(false);
     mediaRef.current?.stop();
-    mediaRef.current?.stream.getTracks().forEach((t) => t.stop());
+    mediaRef.current?.stream.getTracks().forEach((track) => track.stop());
     wsRef.current?.close();
     mediaRef.current = null;
     wsRef.current = null;

@@ -151,8 +151,9 @@ The app currently exposes these routes:
 - `/get-started` - choose resume or interview path
 - `/interview-type` - choose interview vs pitch session
 - `/mock-interview` - live session page
-
-There are also `Auth.tsx` and `Account.tsx` page files in the repo, but they are placeholders and are not wired into the router yet.
+- `/settings` - theme and appearance settings
+- `/auth` - Supabase sign-in / sign-up
+- `/account` - saved per-user interview history
 
 ## Backend API Reference
 
@@ -376,7 +377,16 @@ Create `frontend/.env` from `frontend/.env.example`:
 ```env
 VITE_API_BASE=http://127.0.0.1:8000
 VITE_WS_BASE=ws://127.0.0.1:8000
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
+
+To enable per-user persistence:
+
+1. Create a Supabase project.
+2. Copy the project URL and anon key into `frontend/.env`.
+3. Run the SQL in `supabase/schema.sql` inside the Supabase SQL editor.
+4. Restart the frontend dev server.
 
 ### Backend
 
@@ -441,6 +451,8 @@ curl -X POST http://localhost:8000/speech/feedback \
 ## Important Implementation Notes
 
 - The frontend now routes backend calls through `VITE_API_BASE` and `VITE_WS_BASE`.
+- Supabase auth and session persistence are frontend-driven. The browser signs users in with Supabase Auth and writes session history directly to Postgres using row-level security.
+- The SQL schema and RLS policies for session storage live in `supabase/schema.sql`.
 - `frontend/vite.config.ts` defines an `/api` proxy, but the current frontend code calls the backend through explicit absolute URLs, so that proxy is not currently used.
 - The backend CORS list and WebSocket allowed origins are configured through `backend/app/config.py` and can be overridden with environment variables.
 - The `run_video_pipeline()` function currently only sends a basic status message. Most video scoring in practice comes from client-collected frames posted later to `/video/feedback`.

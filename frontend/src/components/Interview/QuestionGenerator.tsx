@@ -1,28 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithLoopbackFallback, getApiBase } from "../../network";
+import type { GeneratedQuestion } from "./types";
 
 type QuestionGeneratorProps = {
   apiBase?: string;
   endpointPath?: string;
-  onQuestions?: (questions: QuestionItem[], raw: unknown) => void;
+  onQuestions?: (questions: GeneratedQuestion[], raw: unknown) => void;
+  onInputChange?: (inputs: { role: string; company: string; callType: string }) => void;
   transcripts?: Array<{ text: string; isFinal: boolean; ts: number }>;
   startSignal?: number;
-  onCurrentQuestionChange?: (question: QuestionItem | null, index: number, total: number) => void;
-};
-
-type QuestionItem = {
-  category?: string | null;
-  question: string;
-  rationale?: string | null;
+  onCurrentQuestionChange?: (question: GeneratedQuestion | null, index: number, total: number) => void;
 };
 
 type QuestionResponse = {
-  questions?: Array<string | QuestionItem>;
-  items?: Array<string | QuestionItem>;
+  questions?: Array<string | GeneratedQuestion>;
+  items?: Array<string | GeneratedQuestion>;
   used_inputs?: string[];
   warnings?: string[];
   data?: {
-    questions?: Array<string | QuestionItem>;
+    questions?: Array<string | GeneratedQuestion>;
   };
 };
 
@@ -32,6 +28,7 @@ export default function QuestionGenerator({
   apiBase = defaultApiBase,
   endpointPath = "/questions/generate",
   onQuestions,
+  onInputChange,
   transcripts,
   startSignal,
   onCurrentQuestionChange,
@@ -43,7 +40,7 @@ export default function QuestionGenerator({
   const [callType, setCallType] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<QuestionItem[]>([]);
+  const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
   const [usedInputs, setUsedInputs] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [rawResponse, setRawResponse] = useState<unknown>(null);
@@ -59,7 +56,7 @@ export default function QuestionGenerator({
 
   
 
-  const normalizeItem = (item: string | QuestionItem): QuestionItem | null => {
+  const normalizeItem = (item: string | GeneratedQuestion): GeneratedQuestion | null => {
     if (typeof item === "string") {
       return { question: item };
     }
@@ -73,34 +70,34 @@ export default function QuestionGenerator({
     return null;
   };
 
-  const extractQuestions = (data: QuestionResponse | string[] | unknown): QuestionItem[] => {
+  const extractQuestions = (data: QuestionResponse | string[] | unknown): GeneratedQuestion[] => {
     if (Array.isArray(data)) {
       return data
         .map(normalizeItem)
-        .filter((item): item is QuestionItem => Boolean(item));
+        .filter((item): item is GeneratedQuestion => Boolean(item));
     }
     if (data && typeof data === "object") {
       const obj = data as QuestionResponse;
       if (Array.isArray(obj.questions)) {
         return obj.questions
           .map(normalizeItem)
-          .filter((item): item is QuestionItem => Boolean(item));
+          .filter((item): item is GeneratedQuestion => Boolean(item));
       }
       if (Array.isArray(obj.items)) {
         return obj.items
           .map(normalizeItem)
-          .filter((item): item is QuestionItem => Boolean(item));
+          .filter((item): item is GeneratedQuestion => Boolean(item));
       }
       if (obj.data && Array.isArray(obj.data.questions)) {
         return obj.data.questions
           .map(normalizeItem)
-          .filter((item): item is QuestionItem => Boolean(item));
+          .filter((item): item is GeneratedQuestion => Boolean(item));
       }
     }
     return [];
   };
 
-  const sortQuestions = (items: QuestionItem[]) => {
+  const sortQuestions = (items: GeneratedQuestion[]) => {
     return items
       .map((item, index) => ({ item, index }))
       .sort((a, b) => {
@@ -125,7 +122,7 @@ export default function QuestionGenerator({
   };
 
   const groupedQuestions = useMemo(() => {
-    const map = new Map<string, Array<{ item: QuestionItem; index: number }>>();
+    const map = new Map<string, Array<{ item: GeneratedQuestion; index: number }>>();
     questions.forEach((item, index) => {
       const key = normalizeCategory(item.category);
       const list = map.get(key) ?? [];
@@ -146,6 +143,10 @@ export default function QuestionGenerator({
         items: map.get(key) ?? [],
       }));
   }, [questions]);
+
+  useEffect(() => {
+    onInputChange?.({ role, company, callType });
+  }, [role, company, callType, onInputChange]);
 
   useEffect(() => {
     if (interviewStatus !== "running") return;
