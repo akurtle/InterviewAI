@@ -273,4 +273,37 @@ textarea {
   .theme-stat-divider {
     background: var(--border);
   }
+
+  .theme-stage {
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 82%, black), color-mix(in srgb, var(--page-bottom) 84%, black));
+    border: 1px solid var(--border);
+    box-shadow: 0 20px 55px var(--shadow);
+  }
+
+  .theme-stage-muted {
+    background: color-mix(in srgb, var(--surface-strong) 76%, black);
+  }
+
+  .theme-stage-overlay {
+    background: color-mix(in srgb, var(--page-bottom) 90%, black);
+  }
+
+  .theme-status-dot {
+    background: var(--text-dim);
+  }
+
+  .theme-status-dot-active {
+    background: var(--accent);
+  }
+
+  .theme-status-dot-warn {
+    background: #facc15;
+  }
+
+  .theme-status-chip {
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-border);
+    color: var(--accent-text);
+  }
 }

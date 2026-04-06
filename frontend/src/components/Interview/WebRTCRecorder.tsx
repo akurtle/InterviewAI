@@ -346,21 +346,21 @@ const WebRTCRecorder: React.FC<Props> = ({
   }, []);
 
   return (
-    <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl overflow-hidden">
+    <div className="theme-stage overflow-hidden rounded-2xl backdrop-blur">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+      <div className="theme-border flex items-center justify-between border-b px-6 py-4">
         <div className="flex items-center gap-3">
           <span
             className={`w-2.5 h-2.5 rounded-full ${
               status === "connected"
-                ? "bg-emerald-500 animate-pulse"
+                ? "theme-status-dot-active animate-pulse"
                 : status === "connecting"
-                ? "bg-yellow-500 animate-pulse"
-                : "bg-gray-600"
+                ? "theme-status-dot-warn animate-pulse"
+                : "theme-status-dot"
             }`}
           />
           <div>
-            <p className="text-white font-semibold text-sm">
+            <p className="theme-text-primary text-sm font-semibold">
               {status === "idle" && "Ready to start"}
               {status === "connecting" && "Connecting..."}
               {status === "connected" && "Live session"}
@@ -368,13 +368,13 @@ const WebRTCRecorder: React.FC<Props> = ({
               {status === "error" && "Error"}
             </p>
             {sessionId && (
-              <p className="text-xs text-gray-400">Session: {sessionId.slice(0, 8)}</p>
+              <p className="theme-text-dim text-xs">Session: {sessionId.slice(0, 8)}</p>
             )}
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/30">
+          <span className="theme-status-chip rounded border px-2 py-1 text-xs">
             {mode === "audio" && "🎤 Audio only"}
             {mode === "video" && "📹 Video only"}
             {mode === "both" && "🎥 Audio + Video"}
@@ -384,7 +384,7 @@ const WebRTCRecorder: React.FC<Props> = ({
 
       {/* Video Preview (if video mode) */}
       {(mode === "video" || mode === "both") && (
-        <div className="relative aspect-video bg-black">
+        <div className="theme-stage-overlay relative aspect-video">
           <video
             ref={videoRef}
             className="w-full h-full object-cover"
@@ -394,9 +394,9 @@ const WebRTCRecorder: React.FC<Props> = ({
           {status === "idle" && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
-                <div className="w-16 h-16 bg-emerald-500/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <div className="theme-icon-badge mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl">
                   <svg
-                    className="w-8 h-8 text-emerald-400"
+                    className="theme-accent-text h-8 w-8"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -409,7 +409,7 @@ const WebRTCRecorder: React.FC<Props> = ({
                     />
                   </svg>
                 </div>
-                <p className="text-white font-semibold">Start session to begin</p>
+                <p className="theme-text-primary font-semibold">Start session to begin</p>
               </div>
             </div>
           )}
@@ -418,11 +418,11 @@ const WebRTCRecorder: React.FC<Props> = ({
 
       {/* Audio-only indicator */}
       {mode === "audio" && (
-        <div className="p-12 bg-linear-to-br from-gray-900 to-black flex items-center justify-center">
+        <div className="theme-stage-muted flex items-center justify-center p-12">
           <div className="text-center">
-            <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="theme-icon-badge mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full">
               <svg
-                className="w-10 h-10 text-emerald-400"
+                className="theme-accent-text h-10 w-10"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -435,8 +435,8 @@ const WebRTCRecorder: React.FC<Props> = ({
                 />
               </svg>
             </div>
-            <p className="text-white font-semibold text-lg">Audio Recording Mode</p>
-            <p className="text-gray-400 text-sm mt-2">
+            <p className="theme-text-primary text-lg font-semibold">Audio Recording Mode</p>
+            <p className="theme-text-muted mt-2 text-sm">
               {status === "connected" ? "Recording your voice..." : "Ready to start"}
             </p>
           </div>
@@ -444,7 +444,7 @@ const WebRTCRecorder: React.FC<Props> = ({
       )}
 
       {/* Controls */}
-      <div className="px-6 py-4 border-t border-gray-800 bg-black/20">
+      <div className="theme-border theme-stage-muted border-t px-6 py-4">
         {error && (
           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
             <p className="text-red-300 text-sm">{error}</p>
@@ -455,14 +455,14 @@ const WebRTCRecorder: React.FC<Props> = ({
           {status === "idle" || status === "error" ? (
             <button
               onClick={startSession}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition"
+              className="theme-button-primary flex-1 rounded-lg px-6 py-3 font-semibold"
             >
               Start Session
             </button>
           ) : (
             <button
               onClick={stopSession}
-              className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition"
+              className="theme-button-secondary flex-1 rounded-lg px-6 py-3 font-semibold"
             >
               Stop Session
             </button>
@@ -471,11 +471,11 @@ const WebRTCRecorder: React.FC<Props> = ({
 
         {/* Live Messages Display */}
         {messages.length > 0 && (
-          <div className="mt-4 max-h-32 overflow-y-auto bg-black/40 rounded-lg p-3 space-y-2">
+          <div className="theme-panel-soft mt-4 max-h-32 space-y-2 overflow-y-auto rounded-lg p-3">
             {messages.slice(-5).map((msg, i) => (
               <div key={i} className="text-xs">
-                <span className="text-emerald-400 font-mono">{msg.type}:</span>{" "}
-                <span className="text-gray-300">{JSON.stringify(msg, null, 2)}</span>
+                <span className="theme-accent-text font-mono">{msg.type}:</span>{" "}
+                <span className="theme-text-secondary">{JSON.stringify(msg, null, 2)}</span>
               </div>
             ))}
           </div>
