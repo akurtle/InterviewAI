@@ -6,7 +6,13 @@ import { useWhisperWS } from "../components/Interview/useWhisper";
 import QuestionGenerator from "../components/Interview/QuestionGenerator";
 import FeedbackPanel from "../components/Interview/FeedbackPanel";
 import SettingsModal from "../components/Interview/SettingsModal";
-import type { GeneratedQuestion, RecordMode, TranscriptItem, VisionFrame } from "../components/Interview/types";
+import type {
+  GeneratedQuestion,
+  QuestionAnswerReview,
+  RecordMode,
+  TranscriptItem,
+  VisionFrame,
+} from "../components/Interview/types";
 import { useAuth } from "../auth";
 import { useSessionType } from "../hooks/useSessionType";
 import { useFeedbackRequests } from "../hooks/useFeedbackRequests";
@@ -60,7 +66,7 @@ const MockInterview = () => {
   const [visionFrames, setVisionFrames] = useState<VisionFrame[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
-  const [questionAnswers, setQuestionAnswers] = useState<Array<{ index: number; text: string }>>([]);
+  const [questionAnswers, setQuestionAnswers] = useState<QuestionAnswerReview[]>([]);
   const [questionContext, setQuestionContext] = useState<SessionQuestionContext>({
     role: "",
     company: "",
@@ -232,6 +238,8 @@ const MockInterview = () => {
     setSessionSaveMessage("Saving session to your account...");
 
     try {
+      const answersByIndex = new Map(questionAnswers.map((answer) => [answer.index, answer]));
+
       await saveInterviewSession({
         userId: user.id,
         sessionType,
@@ -239,8 +247,17 @@ const MockInterview = () => {
         questionContext,
         questions: generatedQuestions.map((question, index) => ({
           ...question,
-          answer_text: questionAnswers.find((answer) => answer.index === index)?.text ?? null,
+          answer_text: answersByIndex.get(index)?.answerText ?? null,
+          answer_started_at: answersByIndex.get(index)?.startedAtMs
+            ? new Date(answersByIndex.get(index)!.startedAtMs!).toISOString()
+            : null,
+          answer_ended_at: answersByIndex.get(index)?.endedAtMs
+            ? new Date(answersByIndex.get(index)!.endedAtMs!).toISOString()
+            : null,
+          answer_duration_seconds: answersByIndex.get(index)?.durationSeconds ?? null,
+          transcript_segments: answersByIndex.get(index)?.transcriptSegments ?? [],
         })),
+        answers: questionAnswers,
         transcripts: feedbackResult.sessionTranscripts,
         visionFrames: feedbackResult.sessionFrames,
         speechFeedback: feedbackResult.speechFeedback,

@@ -474,6 +474,9 @@ curl -X POST http://localhost:8000/speech/feedback \
 - Supabase auth and session persistence are frontend-driven. The browser signs users in with Supabase Auth and writes session history directly to Postgres using row-level security.
 - Google OAuth now uses the same Supabase auth flow as email/password sign-in.
 - The SQL schema and RLS policies for session storage live in `supabase/schema.sql`.
+- Per-question review data now also persists in `public.interview_session_answers`, including answer timing and final transcript segments for each saved question.
+- Session history lists now read from a lightweight `interview_session_summaries` view, while full transcript/feedback payloads are fetched only when a user opens a specific session.
+- The frontend route tree is lazy-loaded, so large interview and account screens are split into separate chunks instead of inflating the initial bundle.
 - `frontend/vite.config.ts` defines an `/api` proxy, but the current frontend code calls the backend through explicit absolute URLs, so that proxy is not currently used.
 - The backend CORS list and WebSocket allowed origins are configured through `backend/app/config.py` and can be overridden with environment variables.
 - The `run_video_pipeline()` function currently only sends a basic status message. Most video scoring in practice comes from client-collected frames posted later to `/video/feedback`.

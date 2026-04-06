@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithLoopbackFallback, getApiBase } from "../../network";
-import type { GeneratedQuestion } from "./types";
+import type { GeneratedQuestion, QuestionAnswerReview } from "./types";
 
 type QuestionGeneratorProps = {
   apiBase?: string;
   endpointPath?: string;
   onQuestions?: (questions: GeneratedQuestion[], raw: unknown) => void;
-  onAnswersChange?: (answers: Array<{ index: number; text: string }>) => void;
+  onAnswersChange?: (answers: QuestionAnswerReview[]) => void;
   onInputChange?: (inputs: { role: string; company: string; callType: string }) => void;
   transcripts?: Array<{ text: string; isFinal: boolean; ts: number }>;
   startSignal?: number;
@@ -34,7 +34,6 @@ export default function QuestionGenerator({
   transcripts,
   startSignal,
   onCurrentQuestionChange,
-
 }: QuestionGeneratorProps) {
   const endpoint = useMemo(() => `${apiBase}${endpointPath}`, [apiBase, endpointPath]);
   const [role, setRole] = useState("");
@@ -48,15 +47,13 @@ export default function QuestionGenerator({
   const [rawResponse, setRawResponse] = useState<unknown>(null);
   const [interviewStatus, setInterviewStatus] = useState<"idle" | "running" | "ended">("idle");
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<Array<{ index: number; text: string }>>([]);
+  const [answers, setAnswers] = useState<QuestionAnswerReview[]>([]);
   const [nowMs, setNowMs] = useState<number | null>(null);
 
   const sessionStartRef = useRef<number | null>(null);
   const questionStartRef = useRef<number | null>(null);
   const transcriptStartIndexRef = useRef<number>(0);
   const startSignalRef = useRef<number | null>(null);
-
-  
 
   const normalizeItem = (item: string | GeneratedQuestion): GeneratedQuestion | null => {
     if (typeof item === "string") {
@@ -202,10 +199,27 @@ export default function QuestionGenerator({
 
   const finalizeAnswer = () => {
     if (!currentQuestion) return;
-    const answerText = currentAnswerText || "—";
+    const answerText = currentAnswerText || "--";
+    const startedAtMs = questionStartRef.current;
+    const endedAtMs =
+      transcriptSlice.length > 0
+        ? transcriptSlice[transcriptSlice.length - 1]?.ts ?? Date.now()
+        : Date.now();
+    const durationSeconds =
+      startedAtMs && endedAtMs && endedAtMs >= startedAtMs
+        ? Math.max(0, Math.round((endedAtMs - startedAtMs) / 1000))
+        : null;
+
     setAnswers((prev) => {
       const next = [...prev];
-      next[currentIndex] = { index: currentIndex, text: answerText };
+      next[currentIndex] = {
+        index: currentIndex,
+        answerText,
+        startedAtMs,
+        endedAtMs,
+        durationSeconds,
+        transcriptSegments: transcriptSlice.map((item) => ({ ...item })),
+      };
       return next;
     });
   };
@@ -269,20 +283,18 @@ export default function QuestionGenerator({
         body: JSON.stringify(payload),
       });
 
-
-      
-
       if (!response.ok) {
         throw new Error(`Question generation failed (${response.status})`);
       }
 
       const data = (await response.json()) as QuestionResponse;
       const extracted = extractQuestions(data);
-      setQuestions(sortQuestions(extracted));
+      const sorted = sortQuestions(extracted);
+      setQuestions(sorted);
       setUsedInputs(Array.isArray(data?.used_inputs) ? data.used_inputs : []);
       setWarnings(Array.isArray(data?.warnings) ? data.warnings : []);
       setRawResponse(data);
-      onQuestions?.(extracted, data);
+      onQuestions?.(sorted, data);
     } catch (err: any) {
       if (err instanceof TypeError) {
         setError(
@@ -339,14 +351,13 @@ export default function QuestionGenerator({
 
   return (
     <div className="theme-panel rounded-2xl p-6 backdrop-blur">
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="theme-text-primary text-lg font-semibold">Question Generator</h2>
           <p className="theme-text-muted text-xs">
             Generate tailored questions for interviews, sales calls, or presentations.
           </p>
         </div>
-     
       </div>
 
       <div className="space-y-3">
@@ -387,7 +398,7 @@ export default function QuestionGenerator({
       </div>
 
       {error && (
-        <div className="mt-4 p-3 rounded-lg border border-red-500/30 bg-red-500/10">
+        <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
           <p className="text-sm text-red-300">{error}</p>
         </div>
       )}
@@ -397,7 +408,7 @@ export default function QuestionGenerator({
           type="button"
           onClick={handleGenerate}
           disabled={isLoading}
-          className={`flex-1 px-4 py-2.5 rounded-lg font-semibold transition ${
+          className={`flex-1 rounded-lg px-4 py-2.5 font-semibold transition ${
             isLoading
               ? "theme-button-secondary cursor-not-allowed opacity-60"
               : "theme-button-primary"
@@ -509,7 +520,7 @@ export default function QuestionGenerator({
 
             {interviewStatus !== "idle" && currentQuestion && (
               <div className="theme-panel-strong mt-4 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="mb-2 flex items-center justify-between">
                   <div>
                     <p className="theme-text-muted text-xs">Current question</p>
                     <p className="theme-text-primary text-sm">
@@ -565,7 +576,7 @@ export default function QuestionGenerator({
                         <p className="theme-text-muted mb-1 text-xs">
                           {answer.index + 1}. {item.question}
                         </p>
-                        <p className="theme-text-secondary text-sm">{answer.text}</p>
+                        <p className="theme-text-secondary text-sm">{answer.answerText}</p>
                       </div>
                     );
                   })}
@@ -573,19 +584,15 @@ export default function QuestionGenerator({
               </div>
             )}
           </div>
-        ) 
-        
-        : rawResponse ? (
-          <pre className="text-xs text-gray-300 whitespace-pre-wrap">
+        ) : rawResponse ? (
+          <pre className="whitespace-pre-wrap text-xs text-gray-300">
             {JSON.stringify(rawResponse, null, 2)}
           </pre>
         ) : (
           <p className="theme-text-dim text-sm">
             Add a role, company, or call type to generate a tailored question set.
           </p>
-        )
-        
-        }
+        )}
       </div>
     </div>
   );

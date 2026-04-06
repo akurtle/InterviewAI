@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../auth";
-import { listInterviewSessions, type StoredInterviewSession } from "../sessionStore";
+import {
+  getInterviewSession,
+  listInterviewSessionAnswers,
+  listInterviewSessions,
+  type StoredInterviewSessionAnswer,
+  type StoredInterviewSession,
+  type StoredInterviewSessionSummary,
+} from "../sessionStore";
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(undefined, {
@@ -61,6 +68,42 @@ const formatDuration = (startedAt: string, endedAt: string) => {
   return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
 };
 
+const formatDurationSeconds = (value: number) => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "N/A";
+  }
+
+  if (value < 60) {
+    return `${value}s`;
+  }
+
+  const minutes = Math.floor(value / 60);
+  const seconds = value % 60;
+  if (minutes < 60) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
+
+const formatAnswerTiming = (startedAt: string | null, endedAt: string | null, durationSeconds: number | null) => {
+  const parts: string[] = [];
+
+  if (startedAt) {
+    parts.push(`Started ${formatDateTime(startedAt)}`);
+  }
+  if (endedAt) {
+    parts.push(`Ended ${formatDateTime(endedAt)}`);
+  }
+  if (typeof durationSeconds === "number" && durationSeconds > 0) {
+    parts.push(`${formatDurationSeconds(durationSeconds)} response`);
+  }
+
+  return parts.join(" • ");
+};
+
 const normalizeTranscriptTimestamp = (value: number) => (value > 1e11 ? value / 1000 : value);
 
 const buildApproxAnswerBlocks = (session: StoredInterviewSession) => {
@@ -99,23 +142,68 @@ const buildApproxAnswerBlocks = (session: StoredInterviewSession) => {
   return blocks;
 };
 
-const buildQuestionAnswerSections = (session: StoredInterviewSession) => {
+const buildQuestionAnswerSections = (
+  session: StoredInterviewSession,
+  answers: StoredInterviewSessionAnswer[]
+) => {
   const questions = session.questions ?? [];
   const blocks = buildApproxAnswerBlocks(session);
+  const hasAnswerRows = answers.length > 0;
   const hasSavedAnswers = questions.some(
     (question) => typeof question.answer_text === "string" && question.answer_text.trim()
   );
 
   if (questions.length === 0) {
     return {
-      approximate: true,
-      sections: blocks.map((answer, index) => ({
-        key: `answer-${index}`,
-        label: `Answer ${index + 1}`,
-        question: "",
-        rationale: null,
-        answer,
-      })),
+      approximate: !hasAnswerRows,
+      sections: hasAnswerRows
+        ? answers.map((answer) => ({
+            key: answer.id,
+            label: `Answer ${answer.position + 1}`,
+            question: answer.question_text,
+            rationale: answer.question_rationale,
+            answer: answer.answer_text ?? "",
+            timing: formatAnswerTiming(
+              answer.answer_started_at,
+              answer.answer_ended_at,
+              answer.answer_duration_seconds
+            ),
+            transcriptSegments: answer.transcript_segments ?? [],
+          }))
+        : blocks.map((answer, index) => ({
+            key: `answer-${index}`,
+            label: `Answer ${index + 1}`,
+            question: "",
+            rationale: null,
+            answer,
+            timing: "",
+            transcriptSegments: [],
+          })),
+    };
+  }
+
+  if (hasAnswerRows) {
+    return {
+      approximate: false,
+      sections: questions.map((question, index) => {
+        const answer = answers.find((item) => item.position === index);
+
+        return {
+          key: answer?.id ?? `question-${index}`,
+          label: `Question ${index + 1}`,
+          question: answer?.question_text ?? question.question,
+          rationale: answer?.question_rationale ?? question.rationale ?? null,
+          answer: answer?.answer_text ?? question.answer_text?.trim() ?? "",
+          timing: answer
+            ? formatAnswerTiming(
+                answer.answer_started_at,
+                answer.answer_ended_at,
+                answer.answer_duration_seconds
+              )
+            : "",
+          transcriptSegments: answer?.transcript_segments ?? question.transcript_segments ?? [],
+        };
+      }),
     };
   }
 
@@ -138,6 +226,12 @@ const buildQuestionAnswerSections = (session: StoredInterviewSession) => {
       question: question.question,
       rationale: question.rationale ?? null,
       answer,
+      timing: formatAnswerTiming(
+        question.answer_started_at ?? null,
+        question.answer_ended_at ?? null,
+        question.answer_duration_seconds ?? null
+      ),
+      transcriptSegments: question.transcript_segments ?? [],
     };
   });
 
@@ -231,24 +325,29 @@ function FeedbackSection({
 
 export default function Account() {
   const { user, signOut, isConfigured } = useAuth();
-  const [sessions, setSessions] = useState<StoredInterviewSession[]>([]);
+  const [sessions, setSessions] = useState<StoredInterviewSessionSummary[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSession, setSelectedSession] = useState<StoredInterviewSession | null>(null);
+  const [selectedSessionAnswers, setSelectedSessionAnswers] = useState<StoredInterviewSessionAnswer[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [detailStatus, setDetailStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isConfigured || !user) {
       setStatus("ready");
+      setSelectedSession(null);
       return;
     }
 
     let cancelled = false;
 
-    void listInterviewSessions()
+    void listInterviewSessions(user.id)
       .then((rows) => {
         if (cancelled) return;
         setSessions(rows);
         setSelectedSessionId((current) => current ?? rows[0]?.id ?? null);
+        setError(null);
         setStatus("ready");
       })
       .catch((nextError: unknown) => {
@@ -262,9 +361,47 @@ export default function Account() {
     };
   }, [isConfigured, user]);
 
-  const selectedSession =
-    sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null;
-  const transcriptReview = selectedSession ? buildQuestionAnswerSections(selectedSession) : null;
+  useEffect(() => {
+    if (!isConfigured || !user || !selectedSessionId) {
+      setSelectedSession(null);
+      setSelectedSessionAnswers([]);
+      setDetailStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setDetailStatus("loading");
+    setError(null);
+
+    void Promise.all([
+      getInterviewSession(selectedSessionId, user.id),
+      listInterviewSessionAnswers(selectedSessionId, user.id),
+    ])
+      .then(([session, answers]) => {
+        if (cancelled) return;
+        setSelectedSession(session);
+        setSelectedSessionAnswers(answers);
+        setError(null);
+        setDetailStatus("ready");
+      })
+      .catch((nextError: unknown) => {
+        if (cancelled) return;
+        setDetailStatus("error");
+        setError(
+          nextError instanceof Error
+            ? nextError.message
+            : "Failed to load the selected session."
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isConfigured, selectedSessionId, user]);
+
+  const transcriptReview = selectedSession
+    ? buildQuestionAnswerSections(selectedSession, selectedSessionAnswers)
+    : null;
 
   return (
     <div className="theme-page-shell">
@@ -334,7 +471,7 @@ export default function Account() {
             <div className="grid gap-6 xl:grid-cols-[360px,minmax(0,1fr)]">
               <aside className="space-y-4">
                 {sessions.map((session) => {
-                  const isSelected = session.id === selectedSession?.id;
+                  const isSelected = session.id === selectedSessionId;
 
                   return (
                     <button
@@ -376,10 +513,12 @@ export default function Account() {
 
                       <div className="theme-border mt-4 border-t pt-4">
                         <p className="theme-text-secondary text-sm">
-                          {session.question_context?.role || "General practice"}
+                          {session.role || "General practice"}
                         </p>
                         <p className="theme-text-muted mt-1 text-xs uppercase tracking-[0.18em]">
-                          {formatDuration(session.started_at, session.ended_at)} session
+                          {session.duration_seconds > 0
+                            ? `${formatDurationSeconds(session.duration_seconds)} session`
+                            : formatDuration(session.started_at, session.ended_at)}
                         </p>
                       </div>
                     </button>
@@ -387,7 +526,24 @@ export default function Account() {
                 })}
               </aside>
 
-              {selectedSession && (
+              {detailStatus === "loading" && (
+                <section className="theme-panel rounded-3xl p-8">
+                  <p className="theme-text-primary text-lg font-semibold">Loading session details</p>
+                  <p className="theme-text-muted mt-2 text-sm">
+                    Fetching the full transcript, questions, and feedback for the selected session.
+                  </p>
+                </section>
+              )}
+
+              {detailStatus === "error" && !selectedSession && (
+                <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6">
+                  <p className="text-sm text-red-100">
+                    {error ?? "Failed to load the selected session."}
+                  </p>
+                </section>
+              )}
+
+              {selectedSession && detailStatus !== "loading" && (
                 <div className="space-y-6">
                   <section className="theme-panel rounded-3xl p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -503,6 +659,11 @@ export default function Account() {
                                 {section.rationale}
                               </p>
                             )}
+                            {section.timing && (
+                              <p className="theme-text-dim mt-3 text-xs uppercase tracking-[0.18em]">
+                                {section.timing}
+                              </p>
+                            )}
                             <div className="theme-border mt-4 border-t pt-4">
                               <p className="theme-text-dim text-xs uppercase tracking-[0.2em]">
                                 Answer
@@ -510,6 +671,23 @@ export default function Account() {
                               <p className="theme-text-secondary mt-2 whitespace-pre-line text-sm leading-7">
                                 {section.answer || "No answer was captured for this question."}
                               </p>
+                              {section.transcriptSegments.length > 0 && (
+                                <div className="mt-4 space-y-2">
+                                  <p className="theme-text-dim text-xs uppercase tracking-[0.2em]">
+                                    Final transcript segments
+                                  </p>
+                                  {section.transcriptSegments.map((segment, segmentIndex) => (
+                                    <div
+                                      key={`${section.key}-segment-${segmentIndex}`}
+                                      className="rounded-xl border border-white/8 bg-black/10 px-3 py-2"
+                                    >
+                                      <p className="theme-text-secondary text-sm leading-6">
+                                        {segment.text}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}
