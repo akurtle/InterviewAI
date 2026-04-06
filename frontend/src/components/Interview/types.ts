@@ -5,6 +5,7 @@ export type GeneratedQuestion = {
   category?: string | null;
   question: string;
   rationale?: string | null;
+  answer_text?: string | null;
 };
 
 export type TranscriptItem = {

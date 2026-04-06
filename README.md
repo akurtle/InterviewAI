@@ -152,8 +152,9 @@ The app currently exposes these routes:
 - `/interview-type` - choose interview vs pitch session
 - `/mock-interview` - live session page
 - `/settings` - theme and appearance settings
-- `/auth` - Supabase sign-in / sign-up
+- `/auth` - Supabase email/password and Google sign-in
 - `/account` - saved per-user interview history
+- `/user` - logged-in session history and feedback review page
 
 ## Backend API Reference
 
@@ -378,15 +379,16 @@ Create `frontend/.env` from `frontend/.env.example`:
 VITE_API_BASE=http://127.0.0.1:8000
 VITE_WS_BASE=ws://127.0.0.1:8000
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your-supabase-publishable-key
 ```
 
 To enable per-user persistence:
 
 1. Create a Supabase project.
-2. Copy the project URL and anon key into `frontend/.env`.
+2. Copy the project URL and publishable key into `frontend/.env`.
 3. Run the SQL in `supabase/schema.sql` inside the Supabase SQL editor.
-4. Restart the frontend dev server.
+4. If you want Google login, enable the Google provider in Supabase Auth and add your frontend origin as an allowed redirect URL.
+5. Restart the frontend dev server.
 
 ## GitHub Actions
 
@@ -470,6 +472,7 @@ curl -X POST http://localhost:8000/speech/feedback \
 
 - The frontend now routes backend calls through `VITE_API_BASE` and `VITE_WS_BASE`.
 - Supabase auth and session persistence are frontend-driven. The browser signs users in with Supabase Auth and writes session history directly to Postgres using row-level security.
+- Google OAuth now uses the same Supabase auth flow as email/password sign-in.
 - The SQL schema and RLS policies for session storage live in `supabase/schema.sql`.
 - `frontend/vite.config.ts` defines an `/api` proxy, but the current frontend code calls the backend through explicit absolute URLs, so that proxy is not currently used.
 - The backend CORS list and WebSocket allowed origins are configured through `backend/app/config.py` and can be overridden with environment variables.

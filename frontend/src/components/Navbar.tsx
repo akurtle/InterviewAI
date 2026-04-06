@@ -48,8 +48,8 @@ function Navbar() {
             </Link>
             {user ? (
               <>
-                <Link to="/account" className="theme-ghost-link transition">
-                  Account
+                <Link to="/user" className="theme-ghost-link transition">
+                  My Sessions
                 </Link>
                 <button
                   type="button"

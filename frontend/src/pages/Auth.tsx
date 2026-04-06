@@ -17,7 +17,7 @@ export default function Auth() {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
-  const redirectPath = (location.state as { from?: string } | null)?.from ?? "/account";
+  const redirectPath = (location.state as { from?: string } | null)?.from ?? "/user";
 
   if (user) {
     return <Navigate to={redirectPath} replace />;
@@ -56,6 +56,34 @@ export default function Auth() {
     );
   };
 
+  const handleGoogleSignIn = async () => {
+    if (!supabase || !isConfigured) {
+      setStatus("error");
+      setMessage("Add your Supabase env vars before using Google sign-in.");
+      return;
+    }
+
+    setStatus("loading");
+    setMessage(null);
+
+    const redirectTo = new URL(redirectPath, window.location.origin).toString();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+      },
+    });
+
+    if (error) {
+      setStatus("error");
+      setMessage(error.message);
+      return;
+    }
+
+    setStatus("success");
+    setMessage("Redirecting to Google sign-in.");
+  };
+
   return (
     <div className="theme-page-shell">
       <Navbar />
@@ -90,12 +118,18 @@ export default function Auth() {
                   Sessions are stored in Supabase with row-level security so each user can only access their own records.
                 </p>
               </div>
+              <div className="theme-panel-soft rounded-2xl p-4">
+                <p className="theme-text-primary font-semibold">Google login</p>
+                <p className="theme-text-muted mt-1 text-sm">
+                  Google OAuth uses the same Supabase auth session, so saved history and row-level security continue to work without a separate user model.
+                </p>
+              </div>
             </div>
 
             {!isConfigured && (
               <div className="mt-8 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-4">
                 <p className="text-sm text-yellow-100">
-                  Supabase is not configured yet. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `frontend/.env`, then run the SQL in `supabase/schema.sql`.
+                  Supabase is not configured yet. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` in `frontend/.env`, then run the SQL in `supabase/schema.sql`.
                 </p>
               </div>
             )}
@@ -120,6 +154,31 @@ export default function Auth() {
             </div>
 
             <form className="space-y-4" onSubmit={handleSubmit}>
+              <button
+                type="button"
+                onClick={() => void handleGoogleSignIn()}
+                disabled={status === "loading" || !isConfigured}
+                className={`flex w-full items-center justify-center gap-3 rounded-xl px-4 py-3 font-semibold ${
+                  status === "loading" || !isConfigured
+                    ? "theme-button-secondary cursor-not-allowed opacity-60"
+                    : "theme-button-secondary"
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-900"
+                >
+                  G
+                </span>
+                Continue with Google
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="theme-border h-px flex-1" />
+                <span className="theme-text-dim text-xs uppercase tracking-[0.2em]">or</span>
+                <div className="theme-border h-px flex-1" />
+              </div>
+
               <div>
                 <label className="theme-text-muted text-xs">Email</label>
                 <input
@@ -176,7 +235,7 @@ export default function Auth() {
             </form>
 
             <p className="theme-text-muted mt-4 text-sm">
-              Need saved history without changing local practice flow? Sign in now and your next completed session will be stored automatically.
+              Need saved history without changing local practice flow? Sign in with Google or email and your next completed session will be stored automatically.
             </p>
 
             <div className="theme-border mt-6 border-t pt-4">

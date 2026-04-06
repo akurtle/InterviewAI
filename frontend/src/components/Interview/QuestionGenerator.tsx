@@ -6,6 +6,7 @@ type QuestionGeneratorProps = {
   apiBase?: string;
   endpointPath?: string;
   onQuestions?: (questions: GeneratedQuestion[], raw: unknown) => void;
+  onAnswersChange?: (answers: Array<{ index: number; text: string }>) => void;
   onInputChange?: (inputs: { role: string; company: string; callType: string }) => void;
   transcripts?: Array<{ text: string; isFinal: boolean; ts: number }>;
   startSignal?: number;
@@ -28,6 +29,7 @@ export default function QuestionGenerator({
   apiBase = defaultApiBase,
   endpointPath = "/questions/generate",
   onQuestions,
+  onAnswersChange,
   onInputChange,
   transcripts,
   startSignal,
@@ -147,6 +149,10 @@ export default function QuestionGenerator({
   useEffect(() => {
     onInputChange?.({ role, company, callType });
   }, [role, company, callType, onInputChange]);
+
+  useEffect(() => {
+    onAnswersChange?.(answers);
+  }, [answers, onAnswersChange]);
 
   useEffect(() => {
     if (interviewStatus !== "running") return;

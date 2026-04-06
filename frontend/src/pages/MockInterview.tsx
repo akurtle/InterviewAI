@@ -60,6 +60,7 @@ const MockInterview = () => {
   const [visionFrames, setVisionFrames] = useState<VisionFrame[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
+  const [questionAnswers, setQuestionAnswers] = useState<Array<{ index: number; text: string }>>([]);
   const [questionContext, setQuestionContext] = useState<SessionQuestionContext>({
     role: "",
     company: "",
@@ -236,7 +237,10 @@ const MockInterview = () => {
         sessionType,
         recordMode,
         questionContext,
-        questions: generatedQuestions,
+        questions: generatedQuestions.map((question, index) => ({
+          ...question,
+          answer_text: questionAnswers.find((answer) => answer.index === index)?.text ?? null,
+        })),
         transcripts: feedbackResult.sessionTranscripts,
         visionFrames: feedbackResult.sessionFrames,
         speechFeedback: feedbackResult.speechFeedback,
@@ -492,7 +496,11 @@ const MockInterview = () => {
               <QuestionGenerator
                 apiBase={API_BASE}
                 endpointPath={endpoints.questions}
-                onQuestions={(questions) => setGeneratedQuestions(questions)}
+                onQuestions={(questions) => {
+                  setGeneratedQuestions(questions);
+                  setQuestionAnswers([]);
+                }}
+                onAnswersChange={setQuestionAnswers}
                 onInputChange={(inputs) => setQuestionContext(inputs)}
                 transcripts={transcripts}
                 startSignal={interviewStartSignal}
