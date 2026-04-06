@@ -9,6 +9,7 @@ import SettingsModal from "../components/Interview/SettingsModal";
 import type { RecordMode, TranscriptItem, VisionFrame } from "../components/Interview/types";
 import { useSessionType } from "../hooks/useSessionType";
 import { useFeedbackRequests } from "../hooks/useFeedbackRequests";
+import { getApiBase, getWsBase } from "../network";
 
 const parseTimestampSeconds = (value: unknown): number => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -64,8 +65,8 @@ const MockInterview: React.FC = () => {
 
   const prevConnectionStatusRef = useRef(connectionStatus);
   const prevAudioRunningRef = useRef(false);
-  const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
-  const WS_BASE = import.meta.env.VITE_WS_BASE ?? API_BASE.replace(/^http/, "ws");
+  const API_BASE = getApiBase();
+  const WS_BASE = getWsBase();
   const { endpoints } = useSessionType();
 
   const handleTranscript = (text: string, isFinal: boolean) => {
@@ -253,23 +254,23 @@ const MockInterview: React.FC = () => {
   }, [connectionStatus, recordMode]);
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="theme-page-shell">
       <Navbar />
 
       <section className="relative pt-28 pb-16 overflow-hidden">
         {/* Background glow */}
         <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500 rounded-full blur-3xl animate-pulse delay-700" />
+          <div className="theme-glow-primary absolute top-1/4 left-1/4 h-96 w-96 rounded-full blur-3xl animate-pulse" />
+          <div className="theme-glow-secondary absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full blur-3xl animate-pulse delay-700" />
         </div>
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-size-[50px_50px]" />
+        <div className="theme-grid-overlay absolute inset-0" />
 
         <div className="relative z-10 max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-start mb-6">
             <button
               type="button"
               onClick={() => window.history.back()}
-              className="text-sm text-gray-400 hover:text-white transition flex items-center space-x-2"
+              className="theme-ghost-link flex items-center space-x-2 text-sm transition"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -280,11 +281,11 @@ const MockInterview: React.FC = () => {
           <div className="mb-6" />
           {activeQuestion && (
             <div className="fixed top-24 left-6 z-40 max-w-md">
-              <div className="rounded-2xl border border-emerald-500/30 bg-black/70 backdrop-blur px-4 py-3 shadow-lg">
-                <p className="text-xs text-emerald-300 mb-1">
+              <div className="theme-panel-strong rounded-2xl border px-4 py-3 shadow-lg backdrop-blur">
+                <p className="theme-accent-text mb-1 text-xs">
                   Question {activeQuestion.index + 1} of {activeQuestion.total}
                 </p>
-                <p className="text-sm text-white">{activeQuestion.text}</p>
+                <p className="theme-text-primary text-sm">{activeQuestion.text}</p>
               </div>
             </div>
           )}
@@ -292,7 +293,7 @@ const MockInterview: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              className="px-4 py-2 rounded-lg border border-gray-800 bg-black/30 text-sm text-gray-200 hover:bg-gray-900/50 transition"
+              className="theme-button-secondary rounded-lg px-4 py-2 text-sm"
             >
               Open settings
             </button>
@@ -302,27 +303,27 @@ const MockInterview: React.FC = () => {
             {/* WebRTC Recorder - Takes 2 columns in video mode, full width in audio mode */}
             <div className={recordMode === "audio" ? "" : "lg:col-span-2"}>
               {recordMode === "audio" ? (
-                <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl overflow-hidden">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+                <div className="theme-panel overflow-hidden rounded-2xl backdrop-blur">
+                  <div className="theme-border flex items-center justify-between border-b px-6 py-4">
                     <div className="flex items-center gap-3">
                       <span className={`w-2.5 h-2.5 rounded-full ${audioStatusDot}`} />
                       <div>
-                        <p className="text-white font-semibold text-sm">{audioStatusLabel}</p>
-                        <p className="text-xs text-gray-400">Audio transcription session</p>
+                        <p className="theme-text-primary text-sm font-semibold">{audioStatusLabel}</p>
+                        <p className="theme-text-muted text-xs">Audio transcription session</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/30">
+                      <span className="theme-chip rounded border px-2 py-1 text-xs">
                         Audio only
                       </span>
                     </div>
                   </div>
 
-                  <div className="p-12 bg-linear-to-br from-gray-900 to-black flex items-center justify-center">
+                  <div className="flex items-center justify-center p-12">
                     <div className="text-center">
-                      <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <div className="theme-icon-badge mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full">
                         <svg
-                          className="w-10 h-10 text-emerald-400"
+                          className="theme-accent-text h-10 w-10"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -335,14 +336,14 @@ const MockInterview: React.FC = () => {
                           />
                         </svg>
                       </div>
-                      <p className="text-white font-semibold text-lg">Live Audio Transcription</p>
-                      <p className="text-gray-400 text-sm mt-2">
+                      <p className="theme-text-primary text-lg font-semibold">Live Audio Transcription</p>
+                      <p className="theme-text-muted mt-2 text-sm">
                         {audioStatus === "recording" ? "Listening for your response..." : "Ready when you are"}
                       </p>
                     </div>
                   </div>
 
-                  <div className="px-6 py-4 border-t border-gray-800 bg-black/20">
+                  <div className="theme-border border-t px-6 py-4">
                     {audioStatus === "error" && (
                       <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                         <p className="text-red-300 text-sm">
@@ -356,8 +357,8 @@ const MockInterview: React.FC = () => {
                         onClick={handleAudioToggle}
                         className={`flex-1 px-6 py-3 rounded-lg font-semibold transition ${
                           isAudioRunning
-                            ? "bg-gray-800 hover:bg-gray-700 text-white"
-                            : "bg-emerald-500 hover:bg-emerald-600 text-white"
+                            ? "theme-button-secondary"
+                            : "theme-button-primary"
                         }`}
                       >
                         {isAudioRunning ? "Stop Session" : "Start Session"}

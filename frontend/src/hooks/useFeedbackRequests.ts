@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedbackStatus, TranscriptItem, VisionFrame } from "../components/Interview/types";
+import { fetchWithLoopbackFallback } from "../network";
 
 type FeedbackHookArgs = {
   apiBase: string;
@@ -54,7 +55,7 @@ export const useFeedbackRequests = ({
       setFeedbackError(null);
 
       try {
-        const response = await fetch(`${apiBase}${speechEndpoint}`, {
+        const response = await fetchWithLoopbackFallback(`${apiBase}${speechEndpoint}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
@@ -83,7 +84,7 @@ export const useFeedbackRequests = ({
       setFeedbackError(null);
 
       try {
-        const response = await fetch(`${apiBase}${videoEndpoint}`, {
+        const response = await fetchWithLoopbackFallback(`${apiBase}${videoEndpoint}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ frames }),

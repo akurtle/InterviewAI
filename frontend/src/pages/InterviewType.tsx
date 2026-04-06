@@ -12,51 +12,51 @@ const InterviewType: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="theme-page-shell">
       <Navbar />
 
-      <section className="relative pt-32 pb-20 overflow-hidden">
+      <section className="relative overflow-hidden pb-20 pt-32">
         <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500 rounded-full blur-3xl animate-pulse delay-700"></div>
+          <div className="theme-glow-primary absolute left-1/4 top-1/4 h-96 w-96 rounded-full blur-3xl animate-pulse"></div>
+          <div className="theme-glow-secondary absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full blur-3xl animate-pulse delay-700"></div>
         </div>
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
+        <div className="theme-grid-overlay absolute inset-0"></div>
 
-        <div className="relative z-10 max-w-6xl mx-auto px-6">
-          <div className="flex items-center justify-start mb-6">
+        <div className="relative z-10 mx-auto max-w-6xl px-6">
+          <div className="mb-6 flex items-center justify-start">
             <Link
               to="/get-started"
-              className="text-sm text-gray-400 hover:text-white transition flex items-center space-x-2"
+              className="theme-ghost-link flex items-center space-x-2 text-sm transition"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
               <span>Back</span>
             </Link>
           </div>
-          <div className="text-center mb-12">
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
+          <div className="mb-12 text-center">
+            <h1 className="theme-text-primary mb-4 text-5xl font-bold md:text-6xl">
               Choose Session Type
             </h1>
-            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+            <p className="theme-text-muted mx-auto max-w-2xl text-xl">
               Pick the format that matches how you want to practice.
             </p>
           </div>
 
-          <div className="max-w-4xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-8">
+          <div className="mx-auto max-w-4xl">
+            <div className="grid gap-8 md:grid-cols-2">
               <button
                 type="button"
                 onClick={() => handleSelect("interview")}
-                className="group text-left bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-emerald-500 transition-all"
+                className="theme-panel theme-card-hover group rounded-2xl p-8 text-left transition-all"
               >
-                <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="theme-icon-badge mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+                  <svg className="theme-accent-text h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10m-10 4h6m-6 4h4M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Interview</h3>
-                <p className="text-gray-400">
+                <h3 className="theme-text-primary mb-2 text-xl font-semibold">Interview</h3>
+                <p className="theme-text-muted">
                   Practice standard interview responses with live feedback.
                 </p>
               </button>
@@ -64,20 +64,19 @@ const InterviewType: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleSelect("pitch")}
-                className="group text-left bg-gray-900/50 border border-gray-800 rounded-2xl p-8 hover:border-emerald-500 transition-all"
+                className="theme-panel theme-card-hover group rounded-2xl p-8 text-left transition-all"
               >
-                <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="theme-icon-badge mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+                  <svg className="theme-accent-text h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Pitch</h3>
-                <p className="text-gray-400">
+                <h3 className="theme-text-primary mb-2 text-xl font-semibold">Pitch</h3>
+                <p className="theme-text-muted">
                   Rehearse a product or sales pitch and get targeted feedback.
                 </p>
               </button>
             </div>
-
           </div>
         </div>
       </section>

@@ -14,7 +14,12 @@ class Settings(BaseSettings):
         "gemini-1.5-flash:generateContent"
     )
     cors_allow_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:3000"]
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
     )
     ws_allowed_origins: list[str] | None = None
     cors_allow_methods: list[str] = Field(default_factory=lambda: ["*"])

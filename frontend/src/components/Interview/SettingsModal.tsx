@@ -1,3 +1,4 @@
+import ThemePicker from "../ThemePicker";
 import type { RecordMode } from "./types";
 
 type SettingsModalProps = {
@@ -24,31 +25,37 @@ export default function SettingsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="relative w-full max-w-3xl bg-gray-900/90 backdrop-blur border border-gray-800 rounded-2xl p-6 max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-white text-lg font-semibold">Settings</h2>
+      <div className="theme-panel relative max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-2xl p-6 backdrop-blur">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="theme-text-primary text-lg font-semibold">Settings</h2>
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg border border-gray-800 text-xs text-gray-300 hover:bg-gray-900/40 transition"
+            className="theme-button-secondary rounded-lg px-3 py-1.5 text-xs"
           >
             Close
           </button>
         </div>
 
-        {/* Recording Mode Selector */}
+        <div className="mb-8">
+          <ThemePicker
+            title="Appearance"
+            description="Switch themes without leaving the interview flow. The selection applies across the whole app."
+          />
+        </div>
+
         <div className="mb-6">
-          <p className="text-gray-400 text-sm mb-2">Recording mode</p>
+          <p className="theme-text-muted mb-2 text-sm">Recording mode</p>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setRecordMode("both")}
               disabled={isSessionLocked}
-              className={`px-3 py-2 rounded-lg border text-sm font-semibold transition ${
+              className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
                 recordMode === "both"
-                  ? "border-emerald-500/60 bg-emerald-500/10 text-white"
-                  : "border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"
-              } ${isSessionLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  ? "theme-choice-active theme-text-primary"
+                  : "theme-button-secondary"
+              } ${isSessionLocked ? "cursor-not-allowed opacity-50" : ""}`}
             >
               Both
             </button>
@@ -57,44 +64,43 @@ export default function SettingsModal({
               type="button"
               onClick={() => setRecordMode("video")}
               disabled={isSessionLocked}
-              className={`px-3 py-2 rounded-lg border text-sm font-semibold transition ${
+              className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
                 recordMode === "video"
-                  ? "border-emerald-500/60 bg-emerald-500/10 text-white"
-                  : "border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"
-              } ${isSessionLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  ? "theme-choice-active theme-text-primary"
+                  : "theme-button-secondary"
+              } ${isSessionLocked ? "cursor-not-allowed opacity-50" : ""}`}
             >
               Video
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 mt-2">
+          <div className="mt-2 grid grid-cols-1 gap-2">
             <button
               type="button"
               onClick={() => setRecordMode("audio")}
               disabled={isSessionLocked}
-              className={`px-3 py-2 rounded-lg border text-sm font-semibold transition ${
+              className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
                 recordMode === "audio"
-                  ? "border-emerald-500/60 bg-emerald-500/10 text-white"
-                  : "border-gray-800 bg-black/20 text-gray-300 hover:bg-gray-900/40"
-              } ${isSessionLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  ? "theme-choice-active theme-text-primary"
+                  : "theme-button-secondary"
+              } ${isSessionLocked ? "cursor-not-allowed opacity-50" : ""}`}
             >
               Audio only
             </button>
           </div>
 
           {isSessionLocked && (
-            <p className="text-xs text-yellow-400 mt-2">
+            <p className="mt-2 text-xs text-yellow-400">
               Stop the session to change recording mode
             </p>
           )}
         </div>
 
-        {/* Connection Status */}
-        <div className="mb-6 p-4 bg-black/40 rounded-lg border border-gray-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-400">Connection</span>
+        <div className="theme-panel-soft mb-6 rounded-lg p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="theme-text-muted text-sm">Connection</span>
             <span
-              className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs font-semibold ${
+              className={`inline-flex items-center gap-2 rounded px-2 py-1 text-xs font-semibold ${
                 connectionStatus === "connected"
                   ? "bg-emerald-500/10 text-emerald-400"
                   : connectionStatus === "connecting"
@@ -105,7 +111,7 @@ export default function SettingsModal({
               }`}
             >
               <span
-                className={`w-2 h-2 rounded-full ${
+                className={`h-2 w-2 rounded-full ${
                   connectionStatus === "connected"
                     ? "bg-emerald-500 animate-pulse"
                     : connectionStatus === "connecting"
@@ -120,45 +126,43 @@ export default function SettingsModal({
           </div>
         </div>
 
-        {/* Interview Tips */}
         <div className="mb-6">
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-            <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <h3 className="theme-text-primary mb-3 flex items-center gap-2 font-semibold">
+            <svg className="theme-accent-text h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             Mock interview tips
           </h3>
-          <ul className="text-sm text-gray-400 space-y-2">
-            <li className="border-l-2 border-emerald-500 pl-3">
+          <ul className="theme-text-muted space-y-2 text-sm">
+            <li className="pl-3" style={{ borderLeft: "2px solid var(--accent)" }}>
               Frame your face and shoulders at eye level
             </li>
-            <li className="border-l-2 border-emerald-500 pl-3">
+            <li className="pl-3" style={{ borderLeft: "2px solid var(--accent)" }}>
               Use STAR method: Situation, Task, Action, Result
             </li>
-            <li className="border-l-2 border-emerald-500 pl-3">
+            <li className="pl-3" style={{ borderLeft: "2px solid var(--accent)" }}>
               Speak clearly and pause before key points
             </li>
-            <li className="border-l-2 border-emerald-500 pl-3">
+            <li className="pl-3" style={{ borderLeft: "2px solid var(--accent)" }}>
               Maintain eye contact with the camera
             </li>
-            <li className="border-l-2 border-emerald-500 pl-3">
+            <li className="pl-3" style={{ borderLeft: "2px solid var(--accent)" }}>
               Practice active listening and stay engaged
             </li>
           </ul>
         </div>
 
-        {/* Vision Data Display */}
         {visionData && (
-          <div className="border-t border-gray-800 pt-4 mt-4">
-            <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-              <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="theme-border mt-4 border-t pt-4">
+            <h3 className="theme-text-primary mb-3 flex items-center gap-2 font-semibold">
+              <svg className="theme-accent-text h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
               Vision Analysis
             </h3>
-            <div className="bg-black/40 rounded-lg p-3">
-              <pre className="text-xs text-gray-300 whitespace-pre-wrap">
+            <div className="theme-panel-soft rounded-lg p-3">
+              <pre className="theme-text-secondary whitespace-pre-wrap text-xs">
                 {JSON.stringify(visionData, null, 2)}
               </pre>
             </div>

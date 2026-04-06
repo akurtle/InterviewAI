@@ -4,7 +4,7 @@ import Features from '../components/Features';
 import Footer from '../components/Footer';
 
 function Home() {
-  return (<div className="min-h-screen bg-black">
+  return (<div className="theme-page-shell">
       <Navbar />
       <Hero />
       <Features />

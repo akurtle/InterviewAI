@@ -12,89 +12,87 @@ interface UploadProps {
   handleAnalyze: () => void;
 }
 
-function Upload({ 
-  selectedOption, 
-  uploadedFile, 
-  setCurrentStep, 
-  setSelectedOption, 
-  setUploadedFile, 
-  handleFileUpload, 
-  handleAnalyze 
+function Upload({
+  selectedOption,
+  uploadedFile,
+  setCurrentStep,
+  setSelectedOption,
+  setUploadedFile,
+  handleFileUpload,
+  handleAnalyze
 }: UploadProps) {
   return (
-    <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-10">
-                <div className="max-w-xl mx-auto">
-                  {/* Upload Area */}
-                  <div className="border-2 border-dashed border-gray-700 rounded-xl p-12 text-center hover:border-emerald-500 transition-all cursor-pointer">
-                    <input
-                      type="file"
-                      id="file-upload"
-                      className="hidden"
-                      accept={selectedOption === 'interview' ? 'audio/*,video/*' : '.pdf,.doc,.docx'}
-                      onChange={handleFileUpload}
-                    />
-                    <label htmlFor="file-upload" className="cursor-pointer">
-                      {!uploadedFile ? (
-                        <>
-                          <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                          </div>
-                          <p className="text-white font-semibold mb-2">
-                            Click to upload or drag and drop
-                          </p>
-                          <p className="text-gray-400 text-sm">
-                            {selectedOption === 'interview' 
-                              ? 'MP3, MP4, WAV, or MOV (max. 100MB)' 
-                              : 'PDF, DOC, or DOCX (max. 10MB)'}
-                          </p>
-                        </>
-                      ) : (
-                        <div className="flex items-center justify-center space-x-3">
-                          <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <div className="text-left">
-                            <p className="text-white font-semibold">{uploadedFile.name}</p>
-                            <p className="text-gray-400 text-sm">
-                              {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </label>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-between mt-8">
-                    <button
-                      onClick={() => {
-                        setCurrentStep('choose');
-                        setSelectedOption(null);
-                        setUploadedFile(null);
-                      }}
-                      className="text-gray-400 hover:text-white transition flex items-center space-x-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                      <span>Back</span>
-                    </button>
-                    <button
-                      onClick={handleAnalyze}
-                      disabled={!uploadedFile}
-                      className={`px-8 py-3 rounded-lg font-semibold transition-all ${
-                        uploadedFile
-                          ? 'bg-emerald-500 hover:bg-emerald-600 text-white transform hover:scale-105'
-                          : 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                      }`}
-                    >
-                      Analyze Now
-                    </button>
-                  </div>
+    <div className="theme-panel rounded-2xl p-10 backdrop-blur">
+      <div className="mx-auto max-w-xl">
+        <div className="theme-panel-soft cursor-pointer rounded-xl border-2 border-dashed p-12 text-center transition-all hover:[border-color:var(--accent-border-strong)]">
+          <input
+            type="file"
+            id="file-upload"
+            className="hidden"
+            accept={selectedOption === 'interview' ? 'audio/*,video/*' : '.pdf,.doc,.docx'}
+            onChange={handleFileUpload}
+          />
+          <label htmlFor="file-upload" className="cursor-pointer">
+            {!uploadedFile ? (
+              <>
+                <div className="theme-icon-badge mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
+                  <svg className="theme-accent-text h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                </div>
+                <p className="theme-text-primary mb-2 font-semibold">
+                  Click to upload or drag and drop
+                </p>
+                <p className="theme-text-muted text-sm">
+                  {selectedOption === 'interview'
+                    ? 'MP3, MP4, WAV, or MOV (max. 100MB)'
+                    : 'PDF, DOC, or DOCX (max. 10MB)'}
+                </p>
+              </>
+            ) : (
+              <div className="flex items-center justify-center space-x-3">
+                <svg className="theme-accent-text h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-left">
+                  <p className="theme-text-primary font-semibold">{uploadedFile.name}</p>
+                  <p className="theme-text-muted text-sm">
+                    {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
                 </div>
               </div>
+            )}
+          </label>
+        </div>
+
+        <div className="mt-8 flex items-center justify-between">
+          <button
+            onClick={() => {
+              setCurrentStep('choose');
+              setSelectedOption(null);
+              setUploadedFile(null);
+            }}
+            className="theme-ghost-link flex items-center space-x-2 transition"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>Back</span>
+          </button>
+          <button
+            onClick={handleAnalyze}
+            disabled={!uploadedFile}
+            className={`rounded-lg px-8 py-3 font-semibold transition-all ${
+              uploadedFile
+                ? 'theme-button-primary hover:scale-105'
+                : 'theme-button-secondary theme-text-dim cursor-not-allowed'
+            }`}
+          >
+            Analyze Now
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

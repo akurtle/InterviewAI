@@ -2,34 +2,34 @@ import { Link } from 'react-router-dom';
 
 function Navbar() {
   return (
-    <nav className="fixed top-0 w-full bg-black/80 backdrop-blur-sm border-b border-gray-800 z-50">
+    <nav className="theme-nav fixed top-0 z-50 w-full border-b backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-linear-to-br from-emerald-400 to-teal-600 rounded-lg flex items-center justify-center">
+            <div className="theme-logo flex h-8 w-8 items-center justify-center rounded-lg">
               <span className="text-white font-bold text-lg">AI</span>
             </div>
-            <span className="text-white font-semibold text-xl">InterviewAI</span>
+            <span className="theme-text-primary text-xl font-semibold">InterviewAI</span>
           </div>
 
           {/* Navigation Links */}
           <div className="hidden md:flex items-center space-x-8">
              <Link 
               to="/#features"
-              className="text-gray-300 hover:text-white transition"
+              className="theme-ghost-link transition"
             >
               Features
             </Link>
              <Link 
               to="/#solutions"
-              className="text-gray-300 hover:text-white transition"
+              className="theme-ghost-link transition"
             >
               Solutions
             </Link>
             <Link 
               to="/#resources"
-              className="text-gray-300 hover:text-white transition"
+              className="theme-ghost-link transition"
             >
               Resources
             </Link>
@@ -37,12 +37,18 @@ function Navbar() {
 
           {/* Auth Buttons */}
           <div className="flex items-center space-x-4">
-            <button className="text-gray-300 hover:text-white transition">
+            <Link
+              to="/settings"
+              className="theme-button-secondary rounded-lg px-4 py-2 text-sm font-medium"
+            >
+              Settings
+            </Link>
+            <button className="theme-ghost-link transition">
               Log In
             </button>
             <Link 
               to="/get-started"
-              className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg transition"
+              className="theme-button-primary rounded-lg px-6 py-2"
             >
               Get Started
             </Link>

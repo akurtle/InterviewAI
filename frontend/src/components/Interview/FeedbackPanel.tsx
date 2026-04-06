@@ -115,10 +115,10 @@ export default function FeedbackPanel({
   const videoNotes = Array.isArray(videoFeedback?.feedback) ? videoFeedback.feedback : [];
 
   return (
-    <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-6">
+    <div className="theme-panel rounded-2xl p-6 backdrop-blur">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-white text-lg font-semibold">AI feedback</h2>
-        <span className="text-xs text-gray-400">Generated after you stop the session</span>
+        <h2 className="theme-text-primary text-lg font-semibold">AI feedback</h2>
+        <span className="theme-text-muted text-xs">Generated after you stop the session</span>
       </div>
 
       {error && (
@@ -128,19 +128,19 @@ export default function FeedbackPanel({
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="p-4 rounded-lg border border-gray-800 bg-black/30">
+        <div className="theme-panel-soft rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-white font-semibold text-sm">Speech feedback</h3>
+            <h3 className="theme-text-primary text-sm font-semibold">Speech feedback</h3>
             <span className={`text-xs px-2 py-1 rounded border ${feedbackBadgeClass(speechStatus)}`}>
               {feedbackBadgeLabel(speechStatus)}
             </span>
           </div>
 
           {speechStatus === "loading" && (
-            <p className="text-sm text-gray-400">Analyzing your transcript...</p>
+            <p className="theme-text-muted text-sm">Analyzing your transcript...</p>
           )}
           {speechStatus === "idle" && (
-            <p className="text-sm text-gray-500">Stop the session to generate speech feedback.</p>
+            <p className="theme-text-dim text-sm">Stop the session to generate speech feedback.</p>
           )}
           {speechStatus === "error" && (
             <p className="text-sm text-red-300">
@@ -149,16 +149,16 @@ export default function FeedbackPanel({
           )}
           {speechStatus === "ready" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/40 px-4 py-3">
+              <div className="theme-panel-strong flex items-center justify-between rounded-lg px-4 py-3">
                 <div>
-                  <p className="text-xs text-gray-400">Overall score</p>
-                  <p className="text-2xl font-semibold text-white">
+                  <p className="theme-text-muted text-xs">Overall score</p>
+                  <p className="theme-text-primary text-2xl font-semibold">
                     {speechFeedbackScore !== null ? speechFeedbackScore.toFixed(1) : "N/A"}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-500">Based on transcript</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="theme-text-dim text-xs">Based on transcript</p>
+                  <p className="theme-text-muted text-xs">
                     {typeof speechMetrics?.total_words === "number"
                       ? `${speechMetrics.total_words} words`
                       : "Word count pending"}
@@ -168,8 +168,8 @@ export default function FeedbackPanel({
 
               {speechNotes.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Key feedback</p>
-                  <ul className="space-y-2 text-sm text-gray-200">
+                  <p className="theme-text-dim text-xs uppercase tracking-wide">Key feedback</p>
+                  <ul className="theme-text-secondary space-y-2 text-sm">
                     {speechNotes.map((note: string, index: number) => (
                       <li key={`${index}-${note.slice(0, 12)}`} className="flex gap-2">
                         <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -182,15 +182,15 @@ export default function FeedbackPanel({
 
               {speechMetrics && (
                 <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Metrics</p>
+                  <p className="theme-text-dim text-xs uppercase tracking-wide">Metrics</p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {speechMetricLabels.map((metric) => (
                       <div
                         key={metric.key}
-                        className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/40 px-3 py-2"
+                        className="theme-panel-strong flex items-center justify-between rounded-lg px-3 py-2"
                       >
-                        <span className="text-xs text-gray-400">{metric.label}</span>
-                        <span className="text-sm text-white">
+                        <span className="theme-text-muted text-xs">{metric.label}</span>
+                        <span className="theme-text-primary text-sm">
                           {formatSpeechMetric(metric.key, speechMetrics?.[metric.key])}
                         </span>
                       </div>
@@ -219,19 +219,19 @@ export default function FeedbackPanel({
           )}
         </div>
 
-        <div className="p-4 rounded-lg border border-gray-800 bg-black/30">
+        <div className="theme-panel-soft rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-white font-semibold text-sm">Video feedback</h3>
+            <h3 className="theme-text-primary text-sm font-semibold">Video feedback</h3>
             <span className={`text-xs px-2 py-1 rounded border ${feedbackBadgeClass(videoStatus)}`}>
               {feedbackBadgeLabel(videoStatus)}
             </span>
           </div>
 
           {videoStatus === "loading" && (
-            <p className="text-sm text-gray-400">Reviewing visual cues...</p>
+            <p className="theme-text-muted text-sm">Reviewing visual cues...</p>
           )}
           {videoStatus === "idle" && (
-            <p className="text-sm text-gray-500">Stop the session to generate video feedback.</p>
+            <p className="theme-text-dim text-sm">Stop the session to generate video feedback.</p>
           )}
           {videoStatus === "error" && (
             <p className="text-sm text-red-300">
@@ -240,16 +240,16 @@ export default function FeedbackPanel({
           )}
           {videoStatus === "ready" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/40 px-4 py-3">
+              <div className="theme-panel-strong flex items-center justify-between rounded-lg px-4 py-3">
                 <div>
-                  <p className="text-xs text-gray-400">Overall score</p>
-                  <p className="text-2xl font-semibold text-white">
+                  <p className="theme-text-muted text-xs">Overall score</p>
+                  <p className="theme-text-primary text-2xl font-semibold">
                     {videoFeedbackScore !== null ? videoFeedbackScore.toFixed(1) : "N/A"}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-500">Based on video frames</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="theme-text-dim text-xs">Based on video frames</p>
+                  <p className="theme-text-muted text-xs">
                     {typeof videoMetrics?.frame_count === "number"
                       ? `${videoMetrics.frame_count} frames`
                       : "Frame count pending"}
@@ -259,8 +259,8 @@ export default function FeedbackPanel({
 
               {videoNotes.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Key feedback</p>
-                  <ul className="space-y-2 text-sm text-gray-200">
+                  <p className="theme-text-dim text-xs uppercase tracking-wide">Key feedback</p>
+                  <ul className="theme-text-secondary space-y-2 text-sm">
                     {videoNotes.map((note: string, index: number) => (
                       <li key={`${index}-${note.slice(0, 12)}`} className="flex gap-2">
                         <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -273,15 +273,15 @@ export default function FeedbackPanel({
 
               {videoMetrics && (
                 <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Metrics</p>
+                  <p className="theme-text-dim text-xs uppercase tracking-wide">Metrics</p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {videoMetricLabels.map((metric) => (
                       <div
                         key={metric.key}
-                        className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/40 px-3 py-2"
+                        className="theme-panel-strong flex items-center justify-between rounded-lg px-3 py-2"
                       >
-                        <span className="text-xs text-gray-400">{metric.label}</span>
-                        <span className="text-sm text-white">
+                        <span className="theme-text-muted text-xs">{metric.label}</span>
+                        <span className="theme-text-primary text-sm">
                           {formatVideoMetric(metric.key, videoMetrics?.[metric.key])}
                         </span>
                       </div>

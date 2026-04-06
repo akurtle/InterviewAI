@@ -1,4 +1,10 @@
 import React, { useRef, useState, useEffect } from "react";
+import {
+  fetchWithLoopbackFallback,
+  getApiBase,
+  getWsBase,
+  openWebSocketWithLoopbackFallback,
+} from "../../network";
 
 type RecordMode = "audio" | "video" | "both";
 type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
@@ -55,8 +61,8 @@ const WebRTCRecorder: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
-  const apiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
-  const wsBase = import.meta.env.VITE_WS_BASE ?? apiBase.replace(/^http/, "ws");
+  const apiBase = getApiBase();
+  const wsBase = getWsBase();
 
   const updateStatus = (newStatus: ConnectionStatus) => {
     setStatus(newStatus);
@@ -141,7 +147,7 @@ const WebRTCRecorder: React.FC<Props> = ({
       await pc.setLocalDescription(offer);
 
       // 5) Send offer to FastAPI backend
-      const response = await fetch(`${apiBase}/webrtc/offer`, {
+      const response = await fetchWithLoopbackFallback(`${apiBase}/webrtc/offer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -162,7 +168,7 @@ const WebRTCRecorder: React.FC<Props> = ({
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
 
       // 7) Connect WebSocket for receiving AI results
-      connectResultsWebSocket(answer.session_id);
+      await connectResultsWebSocket(answer.session_id);
 
       updateStatus("connected");
 
@@ -261,13 +267,11 @@ const WebRTCRecorder: React.FC<Props> = ({
     }
   };
 
-  const connectResultsWebSocket = (sid: string) => {
-    const ws = new WebSocket(`${wsBase}/ws/results/${sid}`);
+  const connectResultsWebSocket = async (sid: string) => {
+    const ws = await openWebSocketWithLoopbackFallback(`${wsBase}/ws/results/${sid}`);
     wsRef.current = ws;
 
-    ws.onopen = () => {
-      console.log("Results WebSocket connected");
-    };
+    console.log("Results WebSocket connected");
 
     ws.onmessage = (event) => {
       try {
@@ -287,6 +291,8 @@ const WebRTCRecorder: React.FC<Props> = ({
 
     ws.onerror = (err) => {
       console.error("WebSocket error:", err);
+      setError("Results WebSocket connection failed");
+      updateStatus("error");
     };
 
     ws.onclose = () => {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fetchWithLoopbackFallback, getApiBase } from "../../network";
 
 type QuestionGeneratorProps = {
   apiBase?: string;
@@ -25,7 +26,7 @@ type QuestionResponse = {
   };
 };
 
-const defaultApiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+const defaultApiBase = getApiBase();
 
 export default function QuestionGenerator({
   apiBase = defaultApiBase,
@@ -255,7 +256,7 @@ export default function QuestionGenerator({
     };
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetchWithLoopbackFallback(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -276,7 +277,13 @@ export default function QuestionGenerator({
       setRawResponse(data);
       onQuestions?.(extracted, data);
     } catch (err: any) {
-      setError(err?.message ?? "Failed to generate questions.");
+      if (err instanceof TypeError) {
+        setError(
+          `Unable to reach the question API at ${endpoint}. Make sure the backend is running and that VITE_API_BASE points to the correct host.`
+        );
+      } else {
+        setError(err?.message ?? "Failed to generate questions.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -324,11 +331,11 @@ export default function QuestionGenerator({
   };
 
   return (
-    <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-6">
+    <div className="theme-panel rounded-2xl p-6 backdrop-blur">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-white text-lg font-semibold">Question Generator</h2>
-          <p className="text-xs text-gray-400">
+          <h2 className="theme-text-primary text-lg font-semibold">Question Generator</h2>
+          <p className="theme-text-muted text-xs">
             Generate tailored questions for interviews, sales calls, or presentations.
           </p>
         </div>
@@ -338,36 +345,36 @@ export default function QuestionGenerator({
       <div className="space-y-3">
         <div className="grid gap-3 md:grid-cols-2">
           <div>
-            <label className="text-xs text-gray-400">Role</label>
+            <label className="theme-text-muted text-xs">Role</label>
             <input
               type="text"
               value={role}
               onChange={(event) => setRole(event.target.value)}
               placeholder="Account Executive"
-              className="mt-1 w-full rounded-lg border border-gray-800 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+              className="theme-input mt-1 w-full rounded-lg px-3 py-2 text-sm"
             />
           </div>
 
           <div>
-            <label className="text-xs text-gray-400">Company</label>
+            <label className="theme-text-muted text-xs">Company</label>
             <input
               type="text"
               value={company}
               onChange={(event) => setCompany(event.target.value)}
               placeholder="Acme Inc."
-              className="mt-1 w-full rounded-lg border border-gray-800 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+              className="theme-input mt-1 w-full rounded-lg px-3 py-2 text-sm"
             />
           </div>
         </div>
 
         <div>
-          <label className="text-xs text-gray-400">Interview or call type</label>
+          <label className="theme-text-muted text-xs">Interview or call type</label>
           <input
             type="text"
             value={callType}
             onChange={(event) => setCallType(event.target.value)}
             placeholder="Panel interview, discovery call, demo presentation"
-            className="mt-1 w-full rounded-lg border border-gray-800 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+            className="theme-input mt-1 w-full rounded-lg px-3 py-2 text-sm"
           />
         </div>
       </div>
@@ -385,8 +392,8 @@ export default function QuestionGenerator({
           disabled={isLoading}
           className={`flex-1 px-4 py-2.5 rounded-lg font-semibold transition ${
             isLoading
-              ? "bg-gray-800 text-gray-400 cursor-not-allowed"
-              : "bg-emerald-500 hover:bg-emerald-600 text-white"
+              ? "theme-button-secondary cursor-not-allowed opacity-60"
+              : "theme-button-primary"
           }`}
         >
           {isLoading ? "Generating..." : "Generate Questions"}
@@ -405,7 +412,7 @@ export default function QuestionGenerator({
             setInterviewStatus("idle");
             setAnswers([]);
           }}
-          className="px-4 py-2.5 rounded-lg border border-gray-800 text-sm text-gray-300 hover:bg-gray-900/40 transition"
+          className="theme-button-secondary rounded-lg px-4 py-2.5 text-sm"
         >
           Reset
         </button>
@@ -415,25 +422,25 @@ export default function QuestionGenerator({
         {questions.length > 0 ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Generated questions</p>
+              <p className="theme-text-dim text-xs uppercase tracking-wide">Generated questions</p>
               {interviewStatus === "idle" && (
                 <button
                   type="button"
                   onClick={startInterview}
-                  className="px-3 py-1.5 rounded-lg border border-emerald-500/40 text-xs text-emerald-300 hover:bg-emerald-500/10 transition"
+                  className="theme-chip rounded-lg px-3 py-1.5 text-xs"
                 >
                   Start interview
                 </button>
               )}
               {interviewStatus === "ended" && (
-                <span className="text-xs text-gray-400">Interview ended</span>
+                <span className="theme-text-muted text-xs">Interview ended</span>
               )}
             </div>
             {(usedInputs.length > 0 || warnings.length > 0) && (
-              <div className="space-y-2 text-xs text-gray-400">
+              <div className="theme-text-muted space-y-2 text-xs">
                 {usedInputs.length > 0 && (
                   <p>
-                    <span className="text-gray-500">Used inputs:</span>{" "}
+                    <span className="theme-text-dim">Used inputs:</span>{" "}
                     {usedInputs.join(", ")}
                   </p>
                 )}
@@ -448,38 +455,38 @@ export default function QuestionGenerator({
               {groupedQuestions.map((group) => (
                 <div key={group.key} className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-wide text-gray-500">
+                    <p className="theme-text-dim text-xs uppercase tracking-wide">
                       {group.label}
                     </p>
-                    <span className="text-xs text-gray-500">{group.items.length} questions</span>
+                    <span className="theme-text-dim text-xs">{group.items.length} questions</span>
                   </div>
                   <div className="space-y-2">
                     {group.items.map(({ item, index }) => (
                       <div
                         key={`${index}-${item.question.slice(0, 20)}`}
-                        className="rounded-lg border border-gray-800 bg-black/40 px-3 py-2 text-sm text-gray-200"
+                        className="theme-panel-strong rounded-lg px-3 py-2 text-sm"
                       >
                         <div className="flex items-start gap-2">
-                          <span className="text-emerald-400 font-mono text-xs mt-0.5">
+                          <span className="theme-accent-text mt-0.5 font-mono text-xs">
                             {index + 1}
                           </span>
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               {item.category && (
-                                <span className="text-[10px] uppercase tracking-wide text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                                <span className="theme-chip rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide">
                                   {item.category.replace(/_/g, " ")}
                                 </span>
                               )}
-                              <span className="text-sm text-gray-200">{item.question}</span>
+                              <span className="theme-text-secondary text-sm">{item.question}</span>
                             </div>
                             {item.rationale && (
-                              <p className="mt-1 text-xs text-gray-400">{item.rationale}</p>
+                              <p className="theme-text-muted mt-1 text-xs">{item.rationale}</p>
                             )}
                           </div>
                           <button
                             type="button"
                             onClick={() => removeQuestionAt(index)}
-                            className="text-xs text-gray-500 hover:text-red-300 transition"
+                            className="theme-text-dim text-xs transition hover:text-red-300"
                             aria-label="Remove question"
                             title="Remove question"
                           >
@@ -494,23 +501,23 @@ export default function QuestionGenerator({
             </div>
 
             {interviewStatus !== "idle" && currentQuestion && (
-              <div className="mt-4 rounded-lg border border-gray-800 bg-black/40 p-4">
+              <div className="theme-panel-strong mt-4 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <p className="text-xs text-gray-400">Current question</p>
-                    <p className="text-sm text-white">
+                    <p className="theme-text-muted text-xs">Current question</p>
+                    <p className="theme-text-primary text-sm">
                       {currentIndex + 1}. {currentQuestion.question}
                     </p>
                   </div>
-                  <div className="text-right text-xs text-gray-400">
+                  <div className="theme-text-muted text-right text-xs">
                     <p>Elapsed: {formatElapsed(totalElapsedMs)}</p>
                     <p>Question: {formatElapsed(questionElapsedMs)}</p>
                   </div>
                 </div>
 
-                <div className="mt-3 rounded-lg border border-gray-800 bg-black/50 p-3">
-                  <p className="text-xs text-gray-500 mb-2">Live answer transcript</p>
-                  <p className="text-sm text-gray-200">
+                <div className="theme-panel-soft mt-3 rounded-lg p-3">
+                  <p className="theme-text-dim mb-2 text-xs">Live answer transcript</p>
+                  <p className="theme-text-secondary text-sm">
                     {currentAnswerText || "Waiting for your response..."}
                   </p>
                 </div>
@@ -520,14 +527,14 @@ export default function QuestionGenerator({
                     <button
                       type="button"
                       onClick={goToNextQuestion}
-                      className="flex-1 px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 transition"
+                      className="theme-button-primary flex-1 rounded-lg px-3 py-2 text-sm font-semibold"
                     >
                       {currentIndex + 1 < questions.length ? "Next question" : "Finish interview"}
                     </button>
                     <button
                       type="button"
                       onClick={endInterview}
-                      className="px-3 py-2 rounded-lg border border-gray-800 text-sm text-gray-300 hover:bg-gray-900/40 transition"
+                      className="theme-button-secondary rounded-lg px-3 py-2 text-sm"
                     >
                       End interview
                     </button>
@@ -538,7 +545,7 @@ export default function QuestionGenerator({
 
             {interviewStatus === "ended" && answers.length > 0 && (
               <div className="mt-4 space-y-2">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Answers</p>
+                <p className="theme-text-dim text-xs uppercase tracking-wide">Answers</p>
                 <div className="space-y-2">
                   {answers.map((answer) => {
                     const item = questions[answer.index];
@@ -546,12 +553,12 @@ export default function QuestionGenerator({
                     return (
                       <div
                         key={`answer-${answer.index}`}
-                        className="rounded-lg border border-gray-800 bg-black/40 p-3"
+                        className="theme-panel-strong rounded-lg p-3"
                       >
-                        <p className="text-xs text-gray-400 mb-1">
+                        <p className="theme-text-muted mb-1 text-xs">
                           {answer.index + 1}. {item.question}
                         </p>
-                        <p className="text-sm text-gray-200">{answer.text}</p>
+                        <p className="theme-text-secondary text-sm">{answer.text}</p>
                       </div>
                     );
                   })}
@@ -566,7 +573,7 @@ export default function QuestionGenerator({
             {JSON.stringify(rawResponse, null, 2)}
           </pre>
         ) : (
-          <p className="text-sm text-gray-500">
+          <p className="theme-text-dim text-sm">
             Add a role, company, or call type to generate a tailored question set.
           </p>
         )

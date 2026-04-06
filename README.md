@@ -374,8 +374,8 @@ The Vite dev server runs on `http://localhost:3000`.
 Create `frontend/.env` from `frontend/.env.example`:
 
 ```env
-VITE_API_BASE=http://localhost:8000
-VITE_WS_BASE=ws://localhost:8000
+VITE_API_BASE=http://127.0.0.1:8000
+VITE_WS_BASE=ws://127.0.0.1:8000
 ```
 
 ### Backend

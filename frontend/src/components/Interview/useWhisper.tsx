@@ -1,5 +1,6 @@
 // useWhisperWS.ts
 import { useRef, useState } from "react";
+import { getWsBase, openWebSocketWithLoopbackFallback } from "../../network";
 
 
 
@@ -18,7 +19,7 @@ interface WhisperCallbacks {
 }
 
 export function useWhisperWS(
-  wsUrl = (import.meta.env.VITE_WS_BASE ?? "ws://localhost:8000") + "/asr",
+  wsUrl = `${getWsBase()}/asr`,
   callbacks?: WhisperCallbacks
 ) {
   const wsRef = useRef<WebSocket | null>(null);
@@ -41,7 +42,7 @@ export function useWhisperWS(
       updateStatus("connecting");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const ws = new WebSocket(wsUrl);
+      const ws = await openWebSocketWithLoopbackFallback(wsUrl);
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
       ws.addEventListener("error", () => updateStatus("error"));
@@ -71,13 +72,7 @@ export function useWhisperWS(
         callbacks?.onTranscript?.(delta, true);
       };
 
-      await new Promise<void>((resolve, reject) => {
-        ws.onopen = () => {
-          updateStatus("connected");
-          resolve();
-        };
-        ws.onerror = () => reject(new Error("WS failed to open"));
-      });
+      updateStatus("connected");
 
       // webm/opus chunks are what WLK’s web UI uses (server decodes via FFmpeg by default) :contentReference[oaicite:2]{index=2}
       const rec = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
