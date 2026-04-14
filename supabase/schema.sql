@@ -1,5 +1,19 @@
 create extension if not exists pgcrypto;
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'session-recordings',
+  'session-recordings',
+  false,
+  104857600,
+  array['video/webm', 'video/mp4', 'video/ogg']
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
 create table if not exists public.interview_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -13,6 +27,11 @@ create table if not exists public.interview_sessions (
   video_feedback jsonb,
   speech_score double precision,
   video_score double precision,
+  recording_bucket text,
+  recording_path text,
+  recording_mime text,
+  recording_bytes bigint,
+  recording_duration_seconds integer,
   started_at timestamptz not null,
   ended_at timestamptz not null,
   created_at timestamptz not null default timezone('utc', now()),
@@ -42,6 +61,11 @@ create table if not exists public.interview_session_answers (
 );
 
 alter table public.interview_sessions
+  add column if not exists recording_bucket text,
+  add column if not exists recording_path text,
+  add column if not exists recording_mime text,
+  add column if not exists recording_bytes bigint,
+  add column if not exists recording_duration_seconds integer,
   add column if not exists role_text text
     generated always as (nullif(btrim(coalesce(question_context ->> 'role', '')), '')) stored,
   add column if not exists company_text text
@@ -54,6 +78,11 @@ alter table public.interview_sessions
     generated always as (jsonb_array_length(transcripts)) stored,
   add column if not exists vision_frame_count integer
     generated always as (jsonb_array_length(vision_frames)) stored,
+  add column if not exists has_recording boolean
+    generated always as (
+      recording_path is not null
+      and nullif(btrim(recording_path), '') is not null
+    ) stored,
   add column if not exists duration_seconds integer
     generated always as (
       greatest(0, floor(extract(epoch from (ended_at - started_at)))::integer)
@@ -169,9 +198,11 @@ create index if not exists interview_sessions_user_id_created_at_idx
     question_count,
     transcript_count,
     vision_frame_count,
+    has_recording,
     duration_seconds,
     speech_score,
     video_score,
+    recording_duration_seconds,
     started_at,
     ended_at,
     updated_at
@@ -282,6 +313,7 @@ select
   question_count,
   transcript_count,
   vision_frame_count,
+  has_recording,
   duration_seconds,
   speech_score,
   video_score,
@@ -293,3 +325,47 @@ from public.interview_sessions;
 
 revoke all on public.interview_session_summaries from public, anon;
 grant select on public.interview_session_summaries to authenticated;
+
+drop policy if exists "Users can view their own session recordings" on storage.objects;
+create policy "Users can view their own session recordings"
+on storage.objects
+for select
+to authenticated
+using (
+  bucket_id = 'session-recordings'
+  and ((select auth.uid())::text = (storage.foldername(name))[1])
+);
+
+drop policy if exists "Users can upload their own session recordings" on storage.objects;
+create policy "Users can upload their own session recordings"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'session-recordings'
+  and ((select auth.uid())::text = (storage.foldername(name))[1])
+);
+
+drop policy if exists "Users can update their own session recordings" on storage.objects;
+create policy "Users can update their own session recordings"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'session-recordings'
+  and ((select auth.uid())::text = (storage.foldername(name))[1])
+)
+with check (
+  bucket_id = 'session-recordings'
+  and ((select auth.uid())::text = (storage.foldername(name))[1])
+);
+
+drop policy if exists "Users can delete their own session recordings" on storage.objects;
+create policy "Users can delete their own session recordings"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'session-recordings'
+  and ((select auth.uid())::text = (storage.foldername(name))[1])
+);

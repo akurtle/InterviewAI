@@ -35,3 +35,10 @@ export type VisionFrame = {
   head_yaw?: number | null;
   head_pitch?: number | null;
 };
+
+export type SessionRecording = {
+  blob: Blob;
+  mimeType: string;
+  size: number;
+  durationSeconds: number | null;
+};

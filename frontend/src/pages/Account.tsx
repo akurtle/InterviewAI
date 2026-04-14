@@ -3,6 +3,7 @@ import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../auth";
 import {
+  getInterviewSessionRecordingUrl,
   getInterviewSession,
   listInterviewSessionAnswers,
   listInterviewSessions,
@@ -86,6 +87,23 @@ const formatDurationSeconds = (value: number) => {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
+
+const formatFileSize = (value: number | null | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "N/A";
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
 };
 
 const formatAnswerTiming = (startedAt: string | null, endedAt: string | null, durationSeconds: number | null) => {
@@ -331,7 +349,10 @@ export default function Account() {
   const [selectedSessionAnswers, setSelectedSessionAnswers] = useState<StoredInterviewSessionAnswer[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [detailStatus, setDetailStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [recordingStatus, setRecordingStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isConfigured || !user) {
@@ -398,6 +419,40 @@ export default function Account() {
       cancelled = true;
     };
   }, [isConfigured, selectedSessionId, user]);
+
+  useEffect(() => {
+    if (!selectedSession?.recording_path || !selectedSession.recording_bucket) {
+      setRecordingUrl(null);
+      setRecordingError(null);
+      setRecordingStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setRecordingStatus("loading");
+    setRecordingError(null);
+
+    void getInterviewSessionRecordingUrl(selectedSession)
+      .then((url) => {
+        if (cancelled) return;
+        setRecordingUrl(url);
+        setRecordingStatus(url ? "ready" : "idle");
+      })
+      .catch((nextError: unknown) => {
+        if (cancelled) return;
+        setRecordingUrl(null);
+        setRecordingStatus("error");
+        setRecordingError(
+          nextError instanceof Error
+            ? nextError.message
+            : "Failed to load the saved session recording."
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSession]);
 
   const transcriptReview = selectedSession
     ? buildQuestionAnswerSections(selectedSession, selectedSessionAnswers)
@@ -598,6 +653,73 @@ export default function Account() {
                   </section>
 
                   <div className="grid gap-6 2xl:grid-cols-2">
+                    <section className="theme-panel rounded-3xl p-6 2xl:col-span-2">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <p className="theme-text-primary text-xl font-semibold">Session Recording</p>
+                          <p className="theme-text-muted mt-2 text-sm">
+                            Replay the captured interview video alongside the saved transcript and feedback.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="theme-panel-soft rounded-2xl p-4 text-center">
+                            <p className="theme-text-dim text-xs uppercase tracking-wide">Duration</p>
+                            <p className="theme-text-primary mt-2 text-lg font-semibold">
+                              {selectedSession.recording_duration_seconds
+                                ? formatDurationSeconds(selectedSession.recording_duration_seconds)
+                                : "N/A"}
+                            </p>
+                          </div>
+                          <div className="theme-panel-soft rounded-2xl p-4 text-center">
+                            <p className="theme-text-dim text-xs uppercase tracking-wide">File Size</p>
+                            <p className="theme-text-primary mt-2 text-lg font-semibold">
+                              {formatFileSize(selectedSession.recording_bytes)}
+                            </p>
+                          </div>
+                          <div className="theme-panel-soft rounded-2xl p-4 text-center">
+                            <p className="theme-text-dim text-xs uppercase tracking-wide">Format</p>
+                            <p className="theme-text-primary mt-2 text-lg font-semibold">
+                              {selectedSession.recording_mime || "N/A"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {recordingStatus === "loading" && (
+                        <div className="theme-panel-soft mt-5 rounded-2xl p-5">
+                          <p className="theme-text-muted text-sm">Loading the saved recording...</p>
+                        </div>
+                      )}
+
+                      {recordingStatus === "error" && (
+                        <div className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+                          <p className="text-sm text-red-100">
+                            {recordingError ?? "Failed to load the saved session recording."}
+                          </p>
+                        </div>
+                      )}
+
+                      {recordingStatus === "idle" && (
+                        <div className="theme-panel-soft mt-5 rounded-2xl p-5">
+                          <p className="theme-text-muted text-sm">
+                            No video recording was saved for this session.
+                          </p>
+                        </div>
+                      )}
+
+                      {recordingUrl && recordingStatus === "ready" && (
+                        <div className="theme-panel-soft mt-5 overflow-hidden rounded-2xl">
+                          <video
+                            className="aspect-video w-full bg-black object-contain"
+                            controls
+                            preload="metadata"
+                            src={recordingUrl}
+                          />
+                        </div>
+                      )}
+                    </section>
+
                     <FeedbackSection
                       title="Speech Feedback"
                       accent="bg-emerald-500/15 text-emerald-100"

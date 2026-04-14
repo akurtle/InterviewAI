@@ -15,6 +15,7 @@ export function useWhisperWS(
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const lastWordsRef = useRef<string[]>([]);
+  const ownsStreamRef = useRef(false);
 
   const [partial] = useState("");
   const [finals, setFinals] = useState<string>("");
@@ -26,10 +27,18 @@ export function useWhisperWS(
     callbacks?.onStatusChange?.(next);
   };
 
-  const start = async () => {
+  const start = async (providedStream?: MediaStream) => {
     try {
       updateStatus("connecting");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = providedStream
+        ? new MediaStream(providedStream.getAudioTracks())
+        : await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      ownsStreamRef.current = !providedStream;
+
+      if (stream.getAudioTracks().length === 0) {
+        throw new Error("No audio track available for transcription.");
+      }
 
       const ws = await openWebSocketWithLoopbackFallback(wsUrl);
       ws.binaryType = "arraybuffer";
@@ -70,10 +79,13 @@ export function useWhisperWS(
   const stop = () => {
     setIsRunning(false);
     mediaRef.current?.stop();
-    mediaRef.current?.stream.getTracks().forEach((track) => track.stop());
+    if (ownsStreamRef.current) {
+      mediaRef.current?.stream.getTracks().forEach((track) => track.stop());
+    }
     wsRef.current?.close();
     mediaRef.current = null;
     wsRef.current = null;
+    ownsStreamRef.current = false;
     lastWordsRef.current = [];
     updateStatus("idle");
   };

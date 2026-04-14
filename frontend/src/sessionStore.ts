@@ -2,10 +2,13 @@ import type {
   GeneratedQuestion,
   QuestionAnswerReview,
   RecordMode,
+  SessionRecording,
   TranscriptItem,
   VisionFrame,
 } from "./components/Interview/types";
 import { isSupabaseConfigured, supabase } from "./supabase";
+
+const SESSION_RECORDINGS_BUCKET = "session-recordings";
 
 export type SessionQuestionContext = {
   role: string;
@@ -24,8 +27,15 @@ export type SessionSavePayload = {
   visionFrames: VisionFrame[];
   speechFeedback: unknown | null;
   videoFeedback: unknown | null;
+  recording: SessionRecording | null;
   startedAt: string;
   endedAt: string;
+};
+
+export type SessionSaveResult = {
+  session: StoredInterviewSession;
+  recordingSaved: boolean;
+  warning: string | null;
 };
 
 export type StoredInterviewSession = {
@@ -41,6 +51,11 @@ export type StoredInterviewSession = {
   video_feedback: unknown | null;
   speech_score: number | null;
   video_score: number | null;
+  recording_bucket: string | null;
+  recording_path: string | null;
+  recording_mime: string | null;
+  recording_bytes: number | null;
+  recording_duration_seconds: number | null;
   started_at: string;
   ended_at: string;
   created_at: string;
@@ -60,6 +75,7 @@ export type StoredInterviewSessionSummary = {
   duration_seconds: number;
   speech_score: number | null;
   video_score: number | null;
+  has_recording: boolean;
   started_at: string;
   ended_at: string;
   created_at: string;
@@ -82,7 +98,61 @@ export type StoredInterviewSessionAnswer = {
   created_at: string;
 };
 
-export async function saveInterviewSession(payload: SessionSavePayload) {
+const getRecordingExtension = (mimeType: string) => {
+  const normalized = mimeType.toLowerCase();
+
+  if (normalized.includes("mp4")) {
+    return "mp4";
+  }
+  if (normalized.includes("ogg")) {
+    return "ogg";
+  }
+
+  return "webm";
+};
+
+const uploadSessionRecording = async (
+  sessionId: string,
+  userId: string,
+  recording: SessionRecording
+) => {
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const extension = getRecordingExtension(recording.mimeType);
+  const path = `${userId}/${sessionId}/recording.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(SESSION_RECORDINGS_BUCKET)
+    .upload(path, recording.blob, {
+      contentType: recording.mimeType || "video/webm",
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw uploadError;
+  }
+
+  const { error: updateError } = await supabase
+    .from("interview_sessions")
+    .update({
+      recording_bucket: SESSION_RECORDINGS_BUCKET,
+      recording_path: path,
+      recording_mime: recording.mimeType || "video/webm",
+      recording_bytes: recording.size,
+      recording_duration_seconds: recording.durationSeconds,
+    })
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+
+  if (updateError) {
+    await supabase.storage.from(SESSION_RECORDINGS_BUCKET).remove([path]);
+    throw updateError;
+  }
+};
+
+export async function saveInterviewSession(payload: SessionSavePayload): Promise<SessionSaveResult> {
   if (!supabase || !isSupabaseConfigured) {
     throw new Error("Supabase is not configured.");
   }
@@ -147,7 +217,36 @@ export async function saveInterviewSession(payload: SessionSavePayload) {
     }
   }
 
-  return data as StoredInterviewSession;
+  let warning: string | null = null;
+  let recordingSaved = false;
+
+  if (payload.recording) {
+    try {
+      await uploadSessionRecording(data.id, payload.userId, payload.recording);
+      recordingSaved = true;
+    } catch (recordingError) {
+      console.error("Recording upload failed:", recordingError);
+      warning = "Session saved, but the recording could not be uploaded.";
+    }
+  }
+
+  const finalSession =
+    recordingSaved && payload.recording
+      ? ({
+          ...data,
+          recording_bucket: SESSION_RECORDINGS_BUCKET,
+          recording_path: `${payload.userId}/${data.id}/recording.${getRecordingExtension(payload.recording.mimeType)}`,
+          recording_mime: payload.recording.mimeType || "video/webm",
+          recording_bytes: payload.recording.size,
+          recording_duration_seconds: payload.recording.durationSeconds,
+        } as StoredInterviewSession)
+      : (data as StoredInterviewSession);
+
+  return {
+    session: finalSession,
+    recordingSaved,
+    warning,
+  };
 }
 
 export async function listInterviewSessions(userId: string, limit = 20) {
@@ -186,6 +285,29 @@ export async function getInterviewSession(sessionId: string, userId: string) {
   }
 
   return data as StoredInterviewSession;
+}
+
+export async function getInterviewSessionRecordingUrl(
+  session: Pick<StoredInterviewSession, "recording_bucket" | "recording_path">,
+  expiresIn = 3600
+) {
+  if (!supabase || !isSupabaseConfigured) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  if (!session.recording_bucket || !session.recording_path) {
+    return null;
+  }
+
+  const { data, error } = await supabase.storage
+    .from(session.recording_bucket)
+    .createSignedUrl(session.recording_path, expiresIn);
+
+  if (error) {
+    throw error;
+  }
+
+  return data.signedUrl;
 }
 
 export async function listInterviewSessionAnswers(sessionId: string, userId: string) {
