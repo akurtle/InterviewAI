@@ -11,6 +11,8 @@ import type {
   QuestionAnswerReview,
   RecordMode,
   SessionRecording,
+  StartupMetricKey,
+  StartupMetrics,
   TranscriptItem,
   VisionFrame,
 } from "../components/Interview/types";
@@ -58,6 +60,37 @@ const parseOptionalNumber = (value: unknown): number | null => {
   return null;
 };
 
+const createEmptyStartupMetrics = (): StartupMetrics => ({
+  session_started_at_ms: null,
+  media_stream_ready_ms: null,
+  results_socket_ready_ms: null,
+  signaling_response_ms: null,
+  remote_description_ready_ms: null,
+  webrtc_connected_ms: null,
+  asr_socket_ready_ms: null,
+  asr_recording_ready_ms: null,
+  session_ready_ms: null,
+});
+
+const computeSessionReadyMs = (metrics: StartupMetrics, mode: RecordMode) => {
+  if (mode === "audio") {
+    return metrics.asr_recording_ready_ms;
+  }
+
+  if (mode === "video") {
+    return metrics.webrtc_connected_ms;
+  }
+
+  if (
+    typeof metrics.webrtc_connected_ms === "number" &&
+    typeof metrics.asr_recording_ready_ms === "number"
+  ) {
+    return Math.max(metrics.webrtc_connected_ms, metrics.asr_recording_ready_ms);
+  }
+
+  return null;
+};
+
 const MockInterview = () => {
   const [recordMode, setRecordMode] = useState<RecordMode>("both");
   const [connectionStatus, setConnectionStatus] = useState<string>("idle");
@@ -77,6 +110,7 @@ const MockInterview = () => {
   const [sessionSaveMessage, setSessionSaveMessage] = useState<string | null>(null);
   const [, setSessionRecording] = useState<SessionRecording | null>(null);
   const [sharedMediaStream, setSharedMediaStream] = useState<MediaStream | null>(null);
+  const [startupMetrics, setStartupMetrics] = useState<StartupMetrics>(createEmptyStartupMetrics);
   const [activeQuestion, setActiveQuestion] = useState<{
     text: string;
     index: number;
@@ -105,6 +139,9 @@ const MockInterview = () => {
     status: audioStatus,
   } = useWhisperWS(`${WS_BASE}/asr`, {
     onTranscript: handleTranscript,
+    onStartupMetric: (metric) => {
+      markStartupMetric(metric);
+    },
   });
 
   const {
@@ -133,11 +170,36 @@ const MockInterview = () => {
     sessionRecordingRef.current = null;
     setSharedMediaStream(null);
     setSessionRecording(null);
+    setStartupMetrics({
+      ...createEmptyStartupMetrics(),
+      session_started_at_ms: 0,
+    });
     setSessionSaveStatus("idle");
     setSessionSaveMessage(null);
     markSessionStart();
     triggerInterviewStart();
   };
+
+  function markStartupMetric(metric: StartupMetricKey) {
+    const startedAt = sessionStartedAtRef.current;
+    if (startedAt == null) return;
+
+    setStartupMetrics((prev) => {
+      if (prev[metric] !== null) {
+        return prev;
+      }
+
+      const next = {
+        ...prev,
+        [metric]: metric === "session_started_at_ms" ? 0 : Date.now() - startedAt,
+      } as StartupMetrics;
+
+      return {
+        ...next,
+        session_ready_ms: computeSessionReadyMs(next, recordMode),
+      };
+    });
+  }
 
   const normalizeVisionFrame = (data: any): VisionFrame | null => {
     if (!data) return null;
@@ -531,6 +593,7 @@ const MockInterview = () => {
                     setSessionRecording(recording);
                   }}
                   onStreamReady={setSharedMediaStream}
+                  onStartupMetric={markStartupMetric}
                 />
               )}
 
@@ -581,6 +644,7 @@ const MockInterview = () => {
           isSessionLocked={isSessionLocked}
           connectionStatus={connectionStatus}
           visionData={visionData}
+          startupMetrics={startupMetrics}
         />
       </section>
 

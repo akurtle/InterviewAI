@@ -42,6 +42,14 @@ interface Props {
   onVisionData?: (data: any) => void;
   onRecordingReady?: (recording: SessionRecording | null) => void;
   onStreamReady?: (stream: MediaStream | null) => void;
+  onStartupMetric?: (
+    metric:
+      | "media_stream_ready_ms"
+      | "results_socket_ready_ms"
+      | "signaling_response_ms"
+      | "remote_description_ready_ms"
+      | "webrtc_connected_ms"
+  ) => void;
 }
 
 const WebRTCRecorder: React.FC<Props> = ({
@@ -51,6 +59,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   onVisionData,
   onRecordingReady,
   onStreamReady,
+  onStartupMetric,
 }) => {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -228,6 +237,7 @@ const WebRTCRecorder: React.FC<Props> = ({
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       onStreamReady?.(stream);
+      onStartupMetric?.("media_stream_ready_ms");
 
       // Show local preview if video
       if (videoRef.current && (mode === "video" || mode === "both")) {
@@ -251,7 +261,10 @@ const WebRTCRecorder: React.FC<Props> = ({
       // Monitor connection state
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState;
-        if (state === "connected") updateStatus("connected");
+        if (state === "connected") {
+          onStartupMetric?.("webrtc_connected_ms");
+          updateStatus("connected");
+        }
         if (state === "failed" || state === "disconnected") {
           updateStatus("disconnected");
           setError("WebRTC connection lost");
@@ -302,10 +315,12 @@ const WebRTCRecorder: React.FC<Props> = ({
       }
 
       const answer: SignalAnswer = await response.json();
+      onStartupMetric?.("signaling_response_ms");
       setSessionId(answer.session_id);
 
       // 6) Set remote description (answer from backend)
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      onStartupMetric?.("remote_description_ready_ms");
 
       // Start local vision sampling for video modes
       if ((mode === "video" || mode === "both") && videoRef.current) {
@@ -405,6 +420,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   const connectResultsWebSocket = async (sid: string) => {
     const ws = await openWebSocketWithLoopbackFallback(`${wsBase}/ws/results/${sid}`);
     wsRef.current = ws;
+    onStartupMetric?.("results_socket_ready_ms");
 
     console.log("Results WebSocket connected");
 

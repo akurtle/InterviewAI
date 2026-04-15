@@ -6,6 +6,7 @@ type WhisperStatus = "idle" | "connecting" | "connected" | "recording" | "error"
 interface WhisperCallbacks {
   onTranscript?: (text: string, isFinal: boolean) => void;
   onStatusChange?: (status: WhisperStatus) => void;
+  onStartupMetric?: (metric: "asr_socket_ready_ms" | "asr_recording_ready_ms") => void;
 }
 
 export function useWhisperWS(
@@ -44,6 +45,7 @@ export function useWhisperWS(
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
       ws.addEventListener("error", () => updateStatus("error"));
+      callbacks?.onStartupMetric?.("asr_socket_ready_ms");
 
       ws.onmessage = (event) => {
         const data = JSON.parse(String(event.data));
@@ -70,6 +72,7 @@ export function useWhisperWS(
       recorder.start(250);
       setIsRunning(true);
       updateStatus("recording");
+      callbacks?.onStartupMetric?.("asr_recording_ready_ms");
     } catch (error) {
       console.error("ASR start failed:", error);
       updateStatus("error");
