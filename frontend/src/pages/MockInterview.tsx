@@ -63,9 +63,12 @@ const parseOptionalNumber = (value: unknown): number | null => {
 const createEmptyStartupMetrics = (): StartupMetrics => ({
   session_started_at_ms: null,
   media_stream_ready_ms: null,
+  offer_created_ms: null,
+  ice_gathering_complete_ms: null,
   results_socket_ready_ms: null,
   signaling_response_ms: null,
   remote_description_ready_ms: null,
+  ice_connected_ms: null,
   webrtc_connected_ms: null,
   asr_socket_ready_ms: null,
   asr_recording_ready_ms: null,

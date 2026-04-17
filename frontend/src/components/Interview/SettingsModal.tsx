@@ -17,9 +17,12 @@ const formatMetricMs = (value: number | null) =>
 
 const startupMetricLabels: Array<{ key: keyof StartupMetrics; label: string }> = [
   { key: "media_stream_ready_ms", label: "Media stream ready" },
+  { key: "offer_created_ms", label: "Offer created" },
+  { key: "ice_gathering_complete_ms", label: "ICE gathering complete" },
   { key: "results_socket_ready_ms", label: "Results socket ready" },
   { key: "signaling_response_ms", label: "Signaling response" },
   { key: "remote_description_ready_ms", label: "Remote description set" },
+  { key: "ice_connected_ms", label: "ICE connected" },
   { key: "webrtc_connected_ms", label: "WebRTC connected" },
   { key: "asr_socket_ready_ms", label: "ASR socket ready" },
   { key: "asr_recording_ready_ms", label: "ASR recording started" },
