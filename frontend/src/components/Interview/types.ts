@@ -43,12 +43,30 @@ export type SessionRecording = {
   durationSeconds: number | null;
 };
 
+export type MediaDeviceOption = {
+  deviceId: string;
+  label: string;
+};
+
+export type MediaDeviceCatalog = {
+  audioInputs: MediaDeviceOption[];
+  videoInputs: MediaDeviceOption[];
+};
+
+export type MediaDeviceSelection = {
+  audioInputId: string;
+  videoInputId: string;
+};
+
 export type StartupMetricKey =
   | "session_started_at_ms"
   | "media_stream_ready_ms"
+  | "offer_created_ms"
+  | "ice_gathering_complete_ms"
   | "results_socket_ready_ms"
   | "signaling_response_ms"
   | "remote_description_ready_ms"
+  | "ice_connected_ms"
   | "webrtc_connected_ms"
   | "asr_socket_ready_ms"
   | "asr_recording_ready_ms"

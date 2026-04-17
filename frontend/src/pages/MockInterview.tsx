@@ -8,6 +8,8 @@ import FeedbackPanel from "../components/Interview/FeedbackPanel";
 import SettingsModal from "../components/Interview/SettingsModal";
 import type {
   GeneratedQuestion,
+  MediaDeviceCatalog,
+  MediaDeviceSelection,
   QuestionAnswerReview,
   RecordMode,
   SessionRecording,
@@ -21,6 +23,8 @@ import { useSessionType } from "../hooks/useSessionType";
 import { useFeedbackRequests } from "../hooks/useFeedbackRequests";
 import { getApiBase, getWsBase } from "../network";
 import { saveInterviewSession, type SessionQuestionContext } from "../sessionStore";
+
+const MEDIA_SELECTION_STORAGE_KEY = "interview-ai:selected-media-devices";
 
 const parseTimestampSeconds = (value: unknown): number => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -63,14 +67,52 @@ const parseOptionalNumber = (value: unknown): number | null => {
 const createEmptyStartupMetrics = (): StartupMetrics => ({
   session_started_at_ms: null,
   media_stream_ready_ms: null,
+  offer_created_ms: null,
+  ice_gathering_complete_ms: null,
   results_socket_ready_ms: null,
   signaling_response_ms: null,
   remote_description_ready_ms: null,
+  ice_connected_ms: null,
   webrtc_connected_ms: null,
   asr_socket_ready_ms: null,
   asr_recording_ready_ms: null,
   session_ready_ms: null,
 });
+
+const createEmptyMediaDeviceCatalog = (): MediaDeviceCatalog => ({
+  audioInputs: [],
+  videoInputs: [],
+});
+
+const readStoredMediaSelection = (): MediaDeviceSelection => {
+  if (typeof window === "undefined") {
+    return { audioInputId: "", videoInputId: "" };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(MEDIA_SELECTION_STORAGE_KEY);
+    if (!raw) {
+      return { audioInputId: "", videoInputId: "" };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<MediaDeviceSelection>;
+    return {
+      audioInputId: typeof parsed.audioInputId === "string" ? parsed.audioInputId : "",
+      videoInputId: typeof parsed.videoInputId === "string" ? parsed.videoInputId : "",
+    };
+  } catch {
+    return { audioInputId: "", videoInputId: "" };
+  }
+};
+
+const buildDeviceLabel = (device: MediaDeviceInfo, index: number) => {
+  const label = device.label.trim();
+  if (label) {
+    return label;
+  }
+
+  return device.kind === "audioinput" ? `Microphone ${index + 1}` : `Camera ${index + 1}`;
+};
 
 const computeSessionReadyMs = (metrics: StartupMetrics, mode: RecordMode) => {
   if (mode === "audio") {
@@ -111,6 +153,11 @@ const MockInterview = () => {
   const [, setSessionRecording] = useState<SessionRecording | null>(null);
   const [sharedMediaStream, setSharedMediaStream] = useState<MediaStream | null>(null);
   const [startupMetrics, setStartupMetrics] = useState<StartupMetrics>(createEmptyStartupMetrics);
+  const [mediaDevices, setMediaDevices] = useState<MediaDeviceCatalog>(createEmptyMediaDeviceCatalog);
+  const [mediaSelection, setMediaSelection] = useState<MediaDeviceSelection>(readStoredMediaSelection);
+  const [isRefreshingMediaDevices, setIsRefreshingMediaDevices] = useState(false);
+  const [mediaDeviceMessage, setMediaDeviceMessage] = useState<string | null>(null);
+  const [mediaDeviceLabelsAvailable, setMediaDeviceLabelsAvailable] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<{
     text: string;
     index: number;
@@ -122,10 +169,108 @@ const MockInterview = () => {
   const sessionStartedAtRef = useRef<number | null>(null);
   const persistedSessionKeyRef = useRef<string>("");
   const sessionRecordingRef = useRef<SessionRecording | null>(null);
+  const mediaSelectionRef = useRef(mediaSelection);
   const API_BASE = getApiBase();
   const WS_BASE = getWsBase();
   const { endpoints, sessionType } = useSessionType();
   const { user, isConfigured: isSupabaseConfigured } = useAuth();
+
+  const refreshMediaDevices = async (requestAccess = false) => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setMediaDeviceMessage("This browser cannot list microphones or cameras yet.");
+      return;
+    }
+
+    setIsRefreshingMediaDevices(true);
+
+    try {
+      if (requestAccess && navigator.mediaDevices.getUserMedia) {
+        const attempts: MediaStreamConstraints[] = [
+          { audio: true, video: true },
+          { audio: true, video: false },
+          { audio: false, video: true },
+        ];
+
+        let permissionError: unknown = null;
+
+        for (const constraints of attempts) {
+          try {
+            const permissionStream = await navigator.mediaDevices.getUserMedia(constraints);
+            permissionStream.getTracks().forEach((track) => track.stop());
+            permissionError = null;
+            break;
+          } catch (error) {
+            permissionError = error;
+          }
+        }
+
+        if (permissionError) {
+          throw permissionError;
+        }
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices
+        .filter((device) => device.kind === "audioinput")
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: buildDeviceLabel(device, index),
+        }));
+      const videoInputs = devices
+        .filter((device) => device.kind === "videoinput")
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: buildDeviceLabel(device, index),
+        }));
+      const labelsAvailable = devices.some(
+        (device) =>
+          (device.kind === "audioinput" || device.kind === "videoinput") &&
+          device.label.trim().length > 0
+      );
+
+      setMediaDevices({ audioInputs, videoInputs });
+      setMediaDeviceLabelsAvailable(labelsAvailable);
+
+      const currentSelection = mediaSelectionRef.current;
+      const nextSelection: MediaDeviceSelection = {
+        audioInputId: audioInputs.some((device) => device.deviceId === currentSelection.audioInputId)
+          ? currentSelection.audioInputId
+          : "",
+        videoInputId: videoInputs.some((device) => device.deviceId === currentSelection.videoInputId)
+          ? currentSelection.videoInputId
+          : "",
+      };
+
+      const lostAudioSelection =
+        Boolean(currentSelection.audioInputId) && nextSelection.audioInputId !== currentSelection.audioInputId;
+      const lostVideoSelection =
+        Boolean(currentSelection.videoInputId) && nextSelection.videoInputId !== currentSelection.videoInputId;
+
+      if (lostAudioSelection || lostVideoSelection) {
+        setMediaSelection(nextSelection);
+        setMediaDeviceMessage(
+          "A selected external device is no longer available. The app will use your default device until you choose another one."
+        );
+      } else if (requestAccess && labelsAvailable) {
+        setMediaDeviceMessage("Device list updated. Your external microphones and cameras are ready to use.");
+      } else if (!labelsAvailable) {
+        setMediaDeviceMessage(
+          "Allow camera or microphone access once to reveal device names for external devices."
+        );
+      } else {
+        setMediaDeviceMessage(null);
+      }
+    } catch (error) {
+      console.error("Failed to refresh media devices:", error);
+      setMediaDeviceMessage(
+        error instanceof Error
+          ? error.message
+          : "The browser could not refresh the available microphones and cameras."
+      );
+    } finally {
+      setIsRefreshingMediaDevices(false);
+    }
+  };
 
   const handleTranscript = (text: string, isFinal: boolean) => {
     // console.log("Transcript:", text, "Final:", isFinal);
@@ -266,6 +411,30 @@ const MockInterview = () => {
 
   const isSessionLocked = connectionStatus === "connected" || connectionStatus === "connecting";
 
+  useEffect(() => {
+    mediaSelectionRef.current = mediaSelection;
+    window.localStorage.setItem(MEDIA_SELECTION_STORAGE_KEY, JSON.stringify(mediaSelection));
+  }, [mediaSelection]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setMediaDeviceMessage("This browser cannot list microphones or cameras yet.");
+      return;
+    }
+
+    void refreshMediaDevices();
+
+    const mediaDevicesApi = navigator.mediaDevices;
+    const handleDeviceChange = () => {
+      void refreshMediaDevices();
+    };
+
+    mediaDevicesApi.addEventListener?.("devicechange", handleDeviceChange);
+
+    return () => {
+      mediaDevicesApi.removeEventListener?.("devicechange", handleDeviceChange);
+    };
+  }, []);
 
   const handleVisionData = (data: any) => {
     console.log("Vision data:", data);
@@ -278,13 +447,37 @@ const MockInterview = () => {
     }
   };
 
+  const handlePreferredDevicesUnavailable = (kinds: Array<"audioinput" | "videoinput">) => {
+    setMediaSelection((current) => ({
+      audioInputId: kinds.includes("audioinput") ? "" : current.audioInputId,
+      videoInputId: kinds.includes("videoinput") ? "" : current.videoInputId,
+    }));
+
+    if (kinds.length === 2) {
+      setMediaDeviceMessage(
+        "Your selected external microphone and camera were unavailable, so the app switched back to the system defaults."
+      );
+      return;
+    }
+
+    const label = kinds[0] === "audioinput" ? "microphone" : "camera";
+    setMediaDeviceMessage(
+      `Your selected external ${label} was unavailable, so the app switched back to the system default.`
+    );
+  };
+
   const handleAudioToggle = async () => {
     if (isAudioRunning) {
       stopAudio();
       return;
     }
     beginSession();
-    await startAudio();
+    await startAudio(undefined, {
+      audioDeviceId: mediaSelection.audioInputId,
+      onPreferredDeviceUnavailable: () => {
+        handlePreferredDevicesUnavailable(["audioinput"]);
+      },
+    });
   };
 
   const persistSession = async () => {
@@ -582,6 +775,9 @@ const MockInterview = () => {
               ) : (
                 <WebRTCRecorder
                   mode={recordMode}
+                  selectedAudioInputId={mediaSelection.audioInputId}
+                  selectedVideoInputId={mediaSelection.videoInputId}
+                  onPreferredDevicesUnavailable={handlePreferredDevicesUnavailable}
                   onStatusChange={(status) => {
                     console.log("Connection status:", status);
                     setConnectionStatus(status);
@@ -641,6 +837,20 @@ const MockInterview = () => {
           onClose={() => setIsSettingsOpen(false)}
           recordMode={recordMode}
           setRecordMode={setRecordMode}
+          mediaDevices={mediaDevices}
+          mediaSelection={mediaSelection}
+          onSelectAudioInput={(audioInputId) =>
+            setMediaSelection((current) => ({ ...current, audioInputId }))
+          }
+          onSelectVideoInput={(videoInputId) =>
+            setMediaSelection((current) => ({ ...current, videoInputId }))
+          }
+          onRefreshMediaDevices={() => {
+            void refreshMediaDevices(!mediaDeviceLabelsAvailable);
+          }}
+          isRefreshingMediaDevices={isRefreshingMediaDevices}
+          mediaDeviceMessage={mediaDeviceMessage}
+          mediaDeviceLabelsAvailable={mediaDeviceLabelsAvailable}
           isSessionLocked={isSessionLocked}
           connectionStatus={connectionStatus}
           visionData={visionData}
