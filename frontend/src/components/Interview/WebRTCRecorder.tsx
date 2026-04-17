@@ -58,6 +58,8 @@ type RecorderMessage = {
 
 type Props = {
   mode?: RecordMode;
+  selectedAudioInputId?: string;
+  selectedVideoInputId?: string;
   onStatusChange?: (status: ConnectionStatus) => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
   onVisionData?: (data: unknown) => void;

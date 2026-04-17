@@ -43,6 +43,21 @@ export type SessionRecording = {
   durationSeconds: number | null;
 };
 
+export type MediaDeviceOption = {
+  deviceId: string;
+  label: string;
+};
+
+export type MediaDeviceCatalog = {
+  audioInputs: MediaDeviceOption[];
+  videoInputs: MediaDeviceOption[];
+};
+
+export type MediaDeviceSelection = {
+  audioInputId: string;
+  videoInputId: string;
+};
+
 export type StartupMetricKey =
   | "session_started_at_ms"
   | "media_stream_ready_ms"
