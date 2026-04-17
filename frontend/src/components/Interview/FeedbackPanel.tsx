@@ -65,6 +65,7 @@ const formatSpeechMetric = (key: string, value: any) => {
 
 const videoMetricLabels: Array<{ key: string; label: string }> = [
   { key: "frame_count", label: "Frames analyzed" },
+  { key: "mouth_frame_count", label: "Mouth frames" },
   { key: "face_presence_rate", label: "Face presence rate" },
   { key: "gaze_at_camera_rate", label: "Gaze at camera rate" },
   { key: "smile_rate", label: "Smile rate" },
@@ -73,6 +74,9 @@ const videoMetricLabels: Array<{ key: string; label: string }> = [
   { key: "long_gaze_break_rate", label: "Long gaze break rate" },
   { key: "long_gaze_breaks", label: "Long gaze breaks" },
   { key: "gaze_break_frames", label: "Gaze break frames" },
+  { key: "avg_mouth_open_ratio", label: "Avg mouth openness" },
+  { key: "avg_mouth_movement_delta", label: "Avg mouth movement" },
+  { key: "articulation_active_rate", label: "Active articulation rate" },
 ];
 
 const formatVideoMetric = (key: string, value: any) => {
@@ -81,12 +85,19 @@ const formatVideoMetric = (key: string, value: any) => {
   if (!Number.isFinite(num)) return String(value);
 
   if (
-    ["face_presence_rate", "gaze_at_camera_rate", "smile_rate", "long_gaze_break_rate"].includes(key)
+    [
+      "face_presence_rate",
+      "gaze_at_camera_rate",
+      "smile_rate",
+      "long_gaze_break_rate",
+      "avg_mouth_open_ratio",
+      "articulation_active_rate",
+    ].includes(key)
   ) {
     return `${(num * 100).toFixed(1)}%`;
   }
 
-  if (["avg_smile_prob", "head_movement_std"].includes(key)) {
+  if (["avg_smile_prob", "head_movement_std", "avg_mouth_movement_delta"].includes(key)) {
     return num.toFixed(2);
   }
 

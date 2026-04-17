@@ -133,6 +133,11 @@ const computeSessionReadyMs = (metrics: StartupMetrics, mode: RecordMode) => {
   return null;
 };
 
+const formatPercent = (value: number | null) => {
+  if (value === null) return "N/A";
+  return `${Math.round(value * 100)}%`;
+};
+
 const MockInterview = () => {
   const [recordMode, setRecordMode] = useState<RecordMode>("both");
   const [connectionStatus, setConnectionStatus] = useState<string>("idle");
@@ -367,6 +372,12 @@ const MockInterview = () => {
         frame.headYaw,
         frame.head_pitch,
         frame.headPitch,
+        frame.mouth_open_ratio,
+        frame.mouthOpenRatio,
+        frame.mouth_movement_delta,
+        frame.mouthMovementDelta,
+        frame.articulation_active,
+        frame.articulationActive,
       ].some((value) => value !== undefined && value !== null);
 
     if (!facePresent && parseOptionalBoolean(frame.face_present ?? frame.facePresent) === null) {
@@ -378,6 +389,14 @@ const MockInterview = () => {
     const smileProb = parseOptionalNumber(frame.smile_prob ?? frame.smileProb);
     const headYaw = parseOptionalNumber(frame.head_yaw ?? frame.headYaw);
     const headPitch = parseOptionalNumber(frame.head_pitch ?? frame.headPitch);
+    const mouthOpenRatio = parseOptionalNumber(
+      frame.mouth_open_ratio ?? frame.mouthOpenRatio
+    );
+    const mouthMovementDelta = parseOptionalNumber(
+      frame.mouth_movement_delta ?? frame.mouthMovementDelta
+    );
+    const articulationActive =
+      parseOptionalBoolean(frame.articulation_active ?? frame.articulationActive);
 
     return {
       timestamp: parseTimestampSeconds(frame.timestamp),
@@ -386,8 +405,58 @@ const MockInterview = () => {
       smile_prob: smileProb,
       head_yaw: headYaw,
       head_pitch: headPitch,
+      mouth_open_ratio: mouthOpenRatio,
+      mouth_movement_delta: mouthMovementDelta,
+      articulation_active: articulationActive,
     };
   };
+
+  const recentMouthFrames = visionFrames.filter(
+    (frame) =>
+      typeof frame.mouth_open_ratio === "number" ||
+      typeof frame.mouth_movement_delta === "number" ||
+      typeof frame.articulation_active === "boolean"
+  );
+  const latestMouthFrame =
+    recentMouthFrames.length > 0 ? recentMouthFrames[recentMouthFrames.length - 1] : null;
+  const mouthFramesWindow = recentMouthFrames.slice(-8);
+  const mouthOpenSamples = mouthFramesWindow.filter(
+    (frame) => typeof frame.mouth_open_ratio === "number"
+  );
+  const mouthMovementSamples = mouthFramesWindow.filter(
+    (frame) => typeof frame.mouth_movement_delta === "number"
+  );
+  const liveMouthOpenRatio =
+    mouthOpenSamples.length > 0
+      ? mouthFramesWindow.reduce(
+          (sum, frame) => sum + (frame.mouth_open_ratio ?? 0),
+          0
+        ) / mouthOpenSamples.length
+      : null;
+  const liveArticulationRate =
+    mouthFramesWindow.length > 0
+      ? mouthFramesWindow.filter((frame) => frame.articulation_active === true).length /
+        mouthFramesWindow.length
+      : null;
+  const liveMouthMovement =
+    mouthMovementSamples.length > 0
+      ? mouthFramesWindow.reduce(
+          (sum, frame) => sum + (frame.mouth_movement_delta ?? 0),
+          0
+        ) / mouthMovementSamples.length
+      : null;
+  const liveArticulationStatus =
+    latestMouthFrame === null
+      ? "Waiting for backend mouth tracking..."
+      : latestMouthFrame.articulation_active
+        ? "Good visible articulation"
+        : "Mouth movement looks limited";
+  const liveArticulationTone =
+    latestMouthFrame?.articulation_active === true
+      ? "text-emerald-300"
+      : latestMouthFrame
+        ? "text-yellow-300"
+        : "theme-text-muted";
 
   const audioStatusLabel =
     audioStatus === "recording"
@@ -794,6 +863,59 @@ const MockInterview = () => {
               )}
 
               {/* AI Feedback */}
+              {recordMode !== "audio" && (
+                <div className="mt-6">
+                  <div className="theme-panel rounded-2xl p-6 backdrop-blur">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="theme-text-primary text-lg font-semibold">
+                          Live articulation
+                        </h2>
+                        <p className="theme-text-muted text-sm">
+                          Backend mouth tracking estimates whether lip and jaw movement are clear
+                          enough while you speak.
+                        </p>
+                      </div>
+                      <span className={`text-sm font-semibold ${liveArticulationTone}`}>
+                        {liveArticulationStatus}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="theme-panel-soft rounded-lg px-4 py-3">
+                        <p className="theme-text-dim text-xs uppercase tracking-wide">
+                          Mouth openness
+                        </p>
+                        <p className="theme-text-primary mt-1 text-xl font-semibold">
+                          {formatPercent(liveMouthOpenRatio)}
+                        </p>
+                      </div>
+                      <div className="theme-panel-soft rounded-lg px-4 py-3">
+                        <p className="theme-text-dim text-xs uppercase tracking-wide">
+                          Active articulation
+                        </p>
+                        <p className="theme-text-primary mt-1 text-xl font-semibold">
+                          {formatPercent(liveArticulationRate)}
+                        </p>
+                      </div>
+                      <div className="theme-panel-soft rounded-lg px-4 py-3">
+                        <p className="theme-text-dim text-xs uppercase tracking-wide">
+                          Movement change
+                        </p>
+                        <p className="theme-text-primary mt-1 text-xl font-semibold">
+                          {liveMouthMovement === null ? "N/A" : liveMouthMovement.toFixed(3)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="theme-text-muted mt-4 text-sm">
+                      This checks visible mouth opening, not exact phoneme accuracy. It works best
+                      when combined with the speech transcript feedback.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6">
                 <FeedbackPanel
                   speechFeedback={speechFeedback}

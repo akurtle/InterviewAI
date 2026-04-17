@@ -34,6 +34,9 @@ export type VisionFrame = {
   smile_prob?: number | null;
   head_yaw?: number | null;
   head_pitch?: number | null;
+  mouth_open_ratio?: number | null;
+  mouth_movement_delta?: number | null;
+  articulation_active?: boolean | null;
 };
 
 export type SessionRecording = {

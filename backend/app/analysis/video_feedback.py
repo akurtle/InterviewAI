@@ -39,6 +39,9 @@ DEFAULT_VIDEO_MODEL = LinearVideoFeedbackModel(
         "avg_smile_prob": 1.5,
         "head_movement_std": -0.4,
         "long_gaze_break_rate": -1.4,
+        "avg_mouth_open_ratio": 3.6,
+        "articulation_active_rate": 1.8,
+        "avg_mouth_movement_delta": 4.5,
     },
     bias=0.1,
 )
@@ -91,6 +94,9 @@ def extract_video_features(
                 "avg_smile_prob": 0.0,
                 "head_movement_std": 0.0,
                 "long_gaze_break_rate": 0.0,
+                "avg_mouth_open_ratio": 0.0,
+                "articulation_active_rate": 0.0,
+                "avg_mouth_movement_delta": 0.0,
             },
             {
                 "frame_count": 0,
@@ -142,6 +148,34 @@ def extract_video_features(
     )
     long_gaze_break_rate = long_breaks / (frame_count / 30.0) if frame_count else 0.0
 
+    mouth_open_ratios = []
+    mouth_movement_deltas = []
+    articulation_samples = []
+    for f in frames_sorted:
+        if not f.get("face_present", True):
+            continue
+
+        mouth_open_value = f.get("mouth_open_ratio")
+        if mouth_open_value is not None:
+            mouth_open_ratios.append(float(mouth_open_value))
+
+        mouth_delta_value = f.get("mouth_movement_delta")
+        if mouth_delta_value is not None:
+            mouth_movement_deltas.append(float(mouth_delta_value))
+
+        articulation_value = f.get("articulation_active")
+        if articulation_value is not None:
+            articulation_samples.append(1.0 if bool(articulation_value) else 0.0)
+
+    avg_mouth_open_ratio = _mean(mouth_open_ratios)
+    articulation_active_rate = _mean(articulation_samples)
+    avg_mouth_movement_delta = _mean(mouth_movement_deltas)
+
+    if not mouth_open_ratios:
+        warnings.append(
+            "No backend mouth landmarks were captured. Install MediaPipe to enable articulation tracking."
+        )
+
     features = {
         "face_presence_rate": face_presence_rate,
         "gaze_at_camera_rate": gaze_at_camera_rate,
@@ -149,6 +183,9 @@ def extract_video_features(
         "avg_smile_prob": avg_smile_prob,
         "head_movement_std": head_movement_std,
         "long_gaze_break_rate": long_gaze_break_rate,
+        "avg_mouth_open_ratio": avg_mouth_open_ratio,
+        "articulation_active_rate": articulation_active_rate,
+        "avg_mouth_movement_delta": avg_mouth_movement_delta,
     }
 
     metrics: Dict[str, Any] = {
@@ -161,6 +198,10 @@ def extract_video_features(
         "long_gaze_break_rate": round(long_gaze_break_rate, 4),
         "long_gaze_breaks": long_breaks,
         "gaze_break_frames": break_frames,
+        "mouth_frame_count": len(mouth_open_ratios),
+        "avg_mouth_open_ratio": round(avg_mouth_open_ratio, 4),
+        "avg_mouth_movement_delta": round(avg_mouth_movement_delta, 4),
+        "articulation_active_rate": round(articulation_active_rate, 4),
     }
 
     return features, metrics, warnings
@@ -170,7 +211,6 @@ def generate_video_feedback(
     frames: List[Dict[str, Any]],
     model: LinearVideoFeedbackModel = DEFAULT_VIDEO_MODEL,
 ) -> Dict[str, Any]:
-    print("\nhere3\n")
     features, metrics, warnings = extract_video_features(frames=frames)
     raw_score = model.predict(features)
     score = 100.0 / (1.0 + math.exp(-raw_score))
@@ -186,9 +226,23 @@ def generate_video_feedback(
         feedback.append("Facial warmth is low. Add a natural smile at key moments.")
     if metrics.get("head_movement_std", 0.0) > 12:
         feedback.append("Head movement is high. Keep posture steady for clarity.")
+    if metrics.get("mouth_frame_count", 0) > 0 and metrics.get("avg_mouth_open_ratio", 0.0) < 0.12:
+        feedback.append(
+            "Mouth opening stays fairly small. Open a bit wider on vowels so your words look more distinct."
+        )
+    if metrics.get("mouth_frame_count", 0) > 0 and metrics.get("avg_mouth_movement_delta", 0.0) < 0.018:
+        feedback.append(
+            "Lip movement is subtle. Try slightly stronger articulation on consonants and stressed words."
+        )
+    if metrics.get("mouth_frame_count", 0) > 0 and metrics.get("articulation_active_rate", 0.0) < 0.35:
+        feedback.append(
+            "Visible articulation is limited for much of the session. Keep your jaw and lips more engaged while speaking."
+        )
 
     if not feedback:
-        feedback.append("Video presence looks solid. Keep steady eye contact and posture.")
+        feedback.append(
+            "Video presence looks solid. Keep steady eye contact, posture, and clear mouth movement."
+        )
 
     return {
         "score": round(score, 2),

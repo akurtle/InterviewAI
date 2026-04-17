@@ -11,3 +11,4 @@ aiortc==1.14.0
 whisperlivekit==0.2.2
 faster-whisper==1.2.1
 numpy==1.26.4
+mediapipe==0.10.14

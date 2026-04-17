@@ -441,7 +441,7 @@ const WebRTCRecorder: React.FC<Props> = ({
           return;
         }
 
-        if (msg.type === "vision") {
+        if (msg.type === "vision" || msg.type === "vision_status") {
           onVisionData?.(msg);
           return;
         }

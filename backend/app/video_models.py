@@ -8,9 +8,21 @@ class VideoFrame(BaseModel):
     timestamp: float = Field(..., description="Frame time in seconds.")
     face_present: bool = Field(True, description="Whether a face is detected.")
     looking_at_camera: bool = Field(False, description="True if gaze is at camera.")
-    smile_prob: float = Field(0.0, description="Smile probability 0..1.")
+    smile_prob: Optional[float] = Field(None, description="Smile probability 0..1.")
     head_yaw: Optional[float] = Field(None, description="Yaw angle in degrees.")
     head_pitch: Optional[float] = Field(None, description="Pitch angle in degrees.")
+    mouth_open_ratio: Optional[float] = Field(
+        None,
+        description="Normalized lip opening ratio estimated from face landmarks.",
+    )
+    mouth_movement_delta: Optional[float] = Field(
+        None,
+        description="Absolute change in mouth openness between adjacent sampled frames.",
+    )
+    articulation_active: Optional[bool] = Field(
+        None,
+        description="True when mouth movement suggests active articulation.",
+    )
 
 
 class VideoSample(BaseModel):
