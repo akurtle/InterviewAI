@@ -35,3 +35,23 @@ export type VisionFrame = {
   head_yaw?: number | null;
   head_pitch?: number | null;
 };
+
+export type SessionRecording = {
+  blob: Blob;
+  mimeType: string;
+  size: number;
+  durationSeconds: number | null;
+};
+
+export type StartupMetricKey =
+  | "session_started_at_ms"
+  | "media_stream_ready_ms"
+  | "results_socket_ready_ms"
+  | "signaling_response_ms"
+  | "remote_description_ready_ms"
+  | "webrtc_connected_ms"
+  | "asr_socket_ready_ms"
+  | "asr_recording_ready_ms"
+  | "session_ready_ms";
+
+export type StartupMetrics = Record<StartupMetricKey, number | null>;

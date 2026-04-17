@@ -5,6 +5,7 @@ import {
   getWsBase,
   openWebSocketWithLoopbackFallback,
 } from "../../network";
+import type { SessionRecording } from "./types";
 
 type RecordMode = "audio" | "video" | "both";
 type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
@@ -39,6 +40,16 @@ interface Props {
   onStatusChange?: (status: ConnectionStatus) => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
   onVisionData?: (data: any) => void;
+  onRecordingReady?: (recording: SessionRecording | null) => void;
+  onStreamReady?: (stream: MediaStream | null) => void;
+  onStartupMetric?: (
+    metric:
+      | "media_stream_ready_ms"
+      | "results_socket_ready_ms"
+      | "signaling_response_ms"
+      | "remote_description_ready_ms"
+      | "webrtc_connected_ms"
+  ) => void;
 }
 
 const WebRTCRecorder: React.FC<Props> = ({
@@ -46,6 +57,9 @@ const WebRTCRecorder: React.FC<Props> = ({
   onStatusChange,
   onTranscript,
   onVisionData,
+  onRecordingReady,
+  onStreamReady,
+  onStartupMetric,
 }) => {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -56,6 +70,13 @@ const WebRTCRecorder: React.FC<Props> = ({
   const visionBusyRef = useRef(false);
   const visionEnabledRef = useRef(false);
   const faceDetectorRef = useRef<FaceDetectorLike | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingMimeTypeRef = useRef<string>("");
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const recordingStopPromiseRef = useRef<Promise<void> | null>(null);
+  const recordingStopResolverRef = useRef<(() => void) | null>(null);
+  const isStoppingRef = useRef(false);
 
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +88,120 @@ const WebRTCRecorder: React.FC<Props> = ({
   const updateStatus = (newStatus: ConnectionStatus) => {
     setStatus(newStatus);
     onStatusChange?.(newStatus);
+  };
+
+  const pickRecordingMimeType = () => {
+    const candidates = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm;codecs=h264,opus",
+      "video/webm",
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(candidate)) {
+        return candidate;
+      }
+    }
+
+    return "";
+  };
+
+  const startLocalRecording = (stream: MediaStream) => {
+    if (typeof MediaRecorder === "undefined") {
+      onRecordingReady?.(null);
+      return;
+    }
+
+    if (stream.getVideoTracks().length === 0) {
+      onRecordingReady?.(null);
+      return;
+    }
+
+    const mimeType = pickRecordingMimeType();
+
+    try {
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      mediaRecorderRef.current = recorder;
+      recordingChunksRef.current = [];
+      recordingMimeTypeRef.current = recorder.mimeType || mimeType || "video/webm";
+      recordingStartedAtRef.current = Date.now();
+      recordingStopPromiseRef.current = null;
+      recordingStopResolverRef.current = null;
+
+      recorder.ondataavailable = (event) => {
+        if (!event.data || event.data.size === 0) return;
+        recordingChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordingChunksRef.current, {
+          type: recordingMimeTypeRef.current || "video/webm",
+        });
+        const startedAt = recordingStartedAtRef.current;
+        const durationSeconds =
+          startedAt == null ? null : Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+
+        if (blob.size > 0) {
+          onRecordingReady?.({
+            blob,
+            mimeType: blob.type || recordingMimeTypeRef.current || "video/webm",
+            size: blob.size,
+            durationSeconds,
+          });
+        } else {
+          onRecordingReady?.(null);
+        }
+
+        mediaRecorderRef.current = null;
+        recordingChunksRef.current = [];
+        recordingMimeTypeRef.current = "";
+        recordingStartedAtRef.current = null;
+        recordingStopResolverRef.current?.();
+        recordingStopResolverRef.current = null;
+        recordingStopPromiseRef.current = null;
+      };
+
+      recorder.onerror = (event) => {
+        console.error("Local recording error:", event);
+      };
+
+      recorder.start(1000);
+    } catch (recordingError) {
+      console.error("Failed to start local recording:", recordingError);
+      onRecordingReady?.(null);
+    }
+  };
+
+  const stopLocalRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) {
+      return;
+    }
+
+    if (recorder.state === "inactive") {
+      return;
+    }
+
+    if (!recordingStopPromiseRef.current) {
+      recordingStopPromiseRef.current = new Promise<void>((resolve) => {
+        recordingStopResolverRef.current = resolve;
+      });
+    }
+
+    try {
+      recorder.stop();
+    } catch (recordingError) {
+      console.error("Failed to stop local recording:", recordingError);
+      recordingStopResolverRef.current?.();
+      recordingStopResolverRef.current = null;
+      recordingStopPromiseRef.current = null;
+    }
+
+    await recordingStopPromiseRef.current;
   };
 
   const getFaceDetector = () => {
@@ -101,6 +236,8 @@ const WebRTCRecorder: React.FC<Props> = ({
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
+      onStreamReady?.(stream);
+      onStartupMetric?.("media_stream_ready_ms");
 
       // Show local preview if video
       if (videoRef.current && (mode === "video" || mode === "both")) {
@@ -109,8 +246,11 @@ const WebRTCRecorder: React.FC<Props> = ({
         await videoRef.current.play().catch(() => {});
       }
 
+      startLocalRecording(stream);
+
       // 2) Create RTCPeerConnection [web:125]
       const pc = new RTCPeerConnection({
+        iceCandidatePoolSize: 4,
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
@@ -121,7 +261,10 @@ const WebRTCRecorder: React.FC<Props> = ({
       // Monitor connection state
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState;
-        if (state === "connected") updateStatus("connected");
+        if (state === "connected") {
+          onStartupMetric?.("webrtc_connected_ms");
+          updateStatus("connected");
+        }
         if (state === "failed" || state === "disconnected") {
           updateStatus("disconnected");
           setError("WebRTC connection lost");
@@ -137,9 +280,19 @@ const WebRTCRecorder: React.FC<Props> = ({
       };
 
       // 3) Add tracks to peer connection [web:124]
-      stream.getTracks().forEach((track) => {
+      stream
+        .getVideoTracks()
+        .forEach((track) => {
         pc.addTrack(track, stream);
         console.log(`Added ${track.kind} track to peer connection`);
+      });
+
+      const nextSessionId = sessionId ?? crypto.randomUUID();
+      setSessionId(nextSessionId);
+
+      void connectResultsWebSocket(nextSessionId).catch((socketError: any) => {
+        console.error("Results WebSocket failed:", socketError);
+        setError(socketError?.message ?? "Results WebSocket connection failed");
       });
 
       // 4) Create offer and set local description [web:132][web:135]
@@ -153,7 +306,7 @@ const WebRTCRecorder: React.FC<Props> = ({
         body: JSON.stringify({
           sdp: pc.localDescription?.sdp,
           type: pc.localDescription?.type,
-          session_id: null,
+          session_id: nextSessionId,
         }),
       });
 
@@ -162,15 +315,12 @@ const WebRTCRecorder: React.FC<Props> = ({
       }
 
       const answer: SignalAnswer = await response.json();
+      onStartupMetric?.("signaling_response_ms");
       setSessionId(answer.session_id);
 
       // 6) Set remote description (answer from backend)
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-
-      // 7) Connect WebSocket for receiving AI results
-      await connectResultsWebSocket(answer.session_id);
-
-      updateStatus("connected");
+      onStartupMetric?.("remote_description_ready_ms");
 
       // Start local vision sampling for video modes
       if ((mode === "video" || mode === "both") && videoRef.current) {
@@ -270,6 +420,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   const connectResultsWebSocket = async (sid: string) => {
     const ws = await openWebSocketWithLoopbackFallback(`${wsBase}/ws/results/${sid}`);
     wsRef.current = ws;
+    onStartupMetric?.("results_socket_ready_ms");
 
     console.log("Results WebSocket connected");
 
@@ -300,13 +451,21 @@ const WebRTCRecorder: React.FC<Props> = ({
     };
   };
 
-  const stopSession = () => {
+  const stopSession = async () => {
+    if (isStoppingRef.current) {
+      return;
+    }
+    isStoppingRef.current = true;
+
+    await stopLocalRecording();
+
     // Stop media tracks
     streamRef.current?.getTracks().forEach((track) => {
       track.stop();
       console.log(`Stopped ${track.kind} track`);
     });
     streamRef.current = null;
+    onStreamReady?.(null);
 
     // Close peer connection
     if (pcRef.current) {
@@ -335,12 +494,13 @@ const WebRTCRecorder: React.FC<Props> = ({
 
     updateStatus("idle");
     setSessionId(null);
+    isStoppingRef.current = false;
   };
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      stopSession();
+      void stopSession();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -461,7 +621,9 @@ const WebRTCRecorder: React.FC<Props> = ({
             </button>
           ) : (
             <button
-              onClick={stopSession}
+              onClick={() => {
+                void stopSession();
+              }}
               className="theme-button-secondary flex-1 rounded-lg px-6 py-3 font-semibold"
             >
               Stop Session

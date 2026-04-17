@@ -10,6 +10,9 @@ import type {
   GeneratedQuestion,
   QuestionAnswerReview,
   RecordMode,
+  SessionRecording,
+  StartupMetricKey,
+  StartupMetrics,
   TranscriptItem,
   VisionFrame,
 } from "../components/Interview/types";
@@ -57,6 +60,37 @@ const parseOptionalNumber = (value: unknown): number | null => {
   return null;
 };
 
+const createEmptyStartupMetrics = (): StartupMetrics => ({
+  session_started_at_ms: null,
+  media_stream_ready_ms: null,
+  results_socket_ready_ms: null,
+  signaling_response_ms: null,
+  remote_description_ready_ms: null,
+  webrtc_connected_ms: null,
+  asr_socket_ready_ms: null,
+  asr_recording_ready_ms: null,
+  session_ready_ms: null,
+});
+
+const computeSessionReadyMs = (metrics: StartupMetrics, mode: RecordMode) => {
+  if (mode === "audio") {
+    return metrics.asr_recording_ready_ms;
+  }
+
+  if (mode === "video") {
+    return metrics.webrtc_connected_ms;
+  }
+
+  if (
+    typeof metrics.webrtc_connected_ms === "number" &&
+    typeof metrics.asr_recording_ready_ms === "number"
+  ) {
+    return Math.max(metrics.webrtc_connected_ms, metrics.asr_recording_ready_ms);
+  }
+
+  return null;
+};
+
 const MockInterview = () => {
   const [recordMode, setRecordMode] = useState<RecordMode>("both");
   const [connectionStatus, setConnectionStatus] = useState<string>("idle");
@@ -74,6 +108,9 @@ const MockInterview = () => {
   });
   const [sessionSaveStatus, setSessionSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [sessionSaveMessage, setSessionSaveMessage] = useState<string | null>(null);
+  const [, setSessionRecording] = useState<SessionRecording | null>(null);
+  const [sharedMediaStream, setSharedMediaStream] = useState<MediaStream | null>(null);
+  const [startupMetrics, setStartupMetrics] = useState<StartupMetrics>(createEmptyStartupMetrics);
   const [activeQuestion, setActiveQuestion] = useState<{
     text: string;
     index: number;
@@ -84,6 +121,7 @@ const MockInterview = () => {
   const prevAudioRunningRef = useRef(false);
   const sessionStartedAtRef = useRef<number | null>(null);
   const persistedSessionKeyRef = useRef<string>("");
+  const sessionRecordingRef = useRef<SessionRecording | null>(null);
   const API_BASE = getApiBase();
   const WS_BASE = getWsBase();
   const { endpoints, sessionType } = useSessionType();
@@ -101,6 +139,9 @@ const MockInterview = () => {
     status: audioStatus,
   } = useWhisperWS(`${WS_BASE}/asr`, {
     onTranscript: handleTranscript,
+    onStartupMetric: (metric) => {
+      markStartupMetric(metric);
+    },
   });
 
   const {
@@ -126,11 +167,39 @@ const MockInterview = () => {
   const beginSession = () => {
     sessionStartedAtRef.current = Date.now();
     persistedSessionKeyRef.current = "";
+    sessionRecordingRef.current = null;
+    setSharedMediaStream(null);
+    setSessionRecording(null);
+    setStartupMetrics({
+      ...createEmptyStartupMetrics(),
+      session_started_at_ms: 0,
+    });
     setSessionSaveStatus("idle");
     setSessionSaveMessage(null);
     markSessionStart();
     triggerInterviewStart();
   };
+
+  function markStartupMetric(metric: StartupMetricKey) {
+    const startedAt = sessionStartedAtRef.current;
+    if (startedAt == null) return;
+
+    setStartupMetrics((prev) => {
+      if (prev[metric] !== null) {
+        return prev;
+      }
+
+      const next = {
+        ...prev,
+        [metric]: metric === "session_started_at_ms" ? 0 : Date.now() - startedAt,
+      } as StartupMetrics;
+
+      return {
+        ...next,
+        session_ready_ms: computeSessionReadyMs(next, recordMode),
+      };
+    });
+  }
 
   const normalizeVisionFrame = (data: any): VisionFrame | null => {
     if (!data) return null;
@@ -220,14 +289,31 @@ const MockInterview = () => {
 
   const persistSession = async () => {
     const feedbackResult = await requestFeedback();
-    if (!feedbackResult) return;
+    const effectiveFeedbackResult = feedbackResult ?? {
+      sessionTranscripts: [] as TranscriptItem[],
+      sessionText: "",
+      sessionFrames: [] as VisionFrame[],
+      speechFeedback: null,
+      videoFeedback: null,
+      speechStatus: "idle" as const,
+      videoStatus: "idle" as const,
+    };
+
+    const hasRecording = sessionRecordingRef.current !== null;
+    const hasQuestionData = generatedQuestions.length > 0 || questionAnswers.length > 0;
+
+    if (!feedbackResult && !hasRecording && !hasQuestionData) {
+      return;
+    }
+
     if (!user || !isSupabaseConfigured) return;
 
     const fingerprint = JSON.stringify({
       startedAt: sessionStartedAtRef.current,
-      transcriptCount: feedbackResult.sessionTranscripts.length,
-      frameCount: feedbackResult.sessionFrames.length,
-      sessionText: feedbackResult.sessionText,
+      transcriptCount: effectiveFeedbackResult.sessionTranscripts.length,
+      frameCount: effectiveFeedbackResult.sessionFrames.length,
+      sessionText: effectiveFeedbackResult.sessionText,
+      recordingBytes: sessionRecordingRef.current?.size ?? 0,
     });
 
     if (persistedSessionKeyRef.current === fingerprint) {
@@ -240,7 +326,7 @@ const MockInterview = () => {
     try {
       const answersByIndex = new Map(questionAnswers.map((answer) => [answer.index, answer]));
 
-      await saveInterviewSession({
+      const result = await saveInterviewSession({
         userId: user.id,
         sessionType,
         recordMode,
@@ -258,17 +344,18 @@ const MockInterview = () => {
           transcript_segments: answersByIndex.get(index)?.transcriptSegments ?? [],
         })),
         answers: questionAnswers,
-        transcripts: feedbackResult.sessionTranscripts,
-        visionFrames: feedbackResult.sessionFrames,
-        speechFeedback: feedbackResult.speechFeedback,
-        videoFeedback: feedbackResult.videoFeedback,
+        transcripts: effectiveFeedbackResult.sessionTranscripts,
+        visionFrames: effectiveFeedbackResult.sessionFrames,
+        speechFeedback: effectiveFeedbackResult.speechFeedback,
+        videoFeedback: effectiveFeedbackResult.videoFeedback,
+        recording: sessionRecordingRef.current,
         startedAt: new Date(sessionStartedAtRef.current ?? Date.now()).toISOString(),
         endedAt: new Date().toISOString(),
       });
 
       persistedSessionKeyRef.current = fingerprint;
       setSessionSaveStatus("saved");
-      setSessionSaveMessage("Session saved to your account.");
+      setSessionSaveMessage(result.warning ?? "Session saved to your account.");
     } catch (error) {
       console.error("Session persistence failed:", error);
       setSessionSaveStatus("error");
@@ -294,15 +381,21 @@ const MockInterview = () => {
   useEffect(() => {
     if (recordMode === "audio") return;
     const shouldRun = connectionStatus === "connecting" || connectionStatus === "connected";
+    const canStartWithSharedStream = Boolean(sharedMediaStream);
 
-    if (shouldRun && !isAudioRunning && (audioStatus === "idle" || audioStatus === "error")) {
-      void startAudio();
+    if (
+      shouldRun &&
+      canStartWithSharedStream &&
+      !isAudioRunning &&
+      (audioStatus === "idle" || audioStatus === "error")
+    ) {
+      void startAudio(sharedMediaStream ?? undefined);
     }
 
     if (!shouldRun && (isAudioRunning || audioStatus === "connecting")) {
       stopAudio();
     }
-  }, [connectionStatus, recordMode, isAudioRunning, audioStatus, startAudio, stopAudio]);
+  }, [connectionStatus, recordMode, sharedMediaStream, isAudioRunning, audioStatus, startAudio, stopAudio]);
 
   useEffect(() => {
     if (recordMode !== "audio") {
@@ -495,6 +588,12 @@ const MockInterview = () => {
                   }}
                   onTranscript={handleTranscript}
                   onVisionData={handleVisionData}
+                  onRecordingReady={(recording) => {
+                    sessionRecordingRef.current = recording;
+                    setSessionRecording(recording);
+                  }}
+                  onStreamReady={setSharedMediaStream}
+                  onStartupMetric={markStartupMetric}
                 />
               )}
 
@@ -545,6 +644,7 @@ const MockInterview = () => {
           isSessionLocked={isSessionLocked}
           connectionStatus={connectionStatus}
           visionData={visionData}
+          startupMetrics={startupMetrics}
         />
       </section>
 
