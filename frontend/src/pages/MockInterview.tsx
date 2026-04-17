@@ -6,6 +6,12 @@ import { useWhisperWS } from "../components/Interview/useWhisper";
 import QuestionGenerator from "../components/Interview/QuestionGenerator";
 import FeedbackPanel from "../components/Interview/FeedbackPanel";
 import SettingsModal from "../components/Interview/SettingsModal";
+import {
+  CALL_ENVIRONMENT_OPTIONS,
+  CALL_ENVIRONMENT_PRESETS,
+  isCallEnvironmentId,
+  type CallEnvironmentId,
+} from "../components/Interview/callEnvironments";
 import type {
   GeneratedQuestion,
   MediaDeviceCatalog,
@@ -26,6 +32,7 @@ import { saveInterviewSession, type SessionQuestionContext } from "../sessionSto
 
 const MEDIA_SELECTION_STORAGE_KEY = "interview-ai:selected-media-devices";
 const MOUTH_TRACKING_STORAGE_KEY = "interview-ai:mouth-tracking-enabled";
+const CALL_ENVIRONMENT_STORAGE_KEY = "interview-ai:call-environment";
 
 const parseTimestampSeconds = (value: unknown): number => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -119,6 +126,15 @@ const readStoredMouthTrackingEnabled = () => {
   return raw !== "false";
 };
 
+const readStoredCallEnvironment = (): CallEnvironmentId => {
+  if (typeof window === "undefined") {
+    return "teams";
+  }
+
+  const raw = window.localStorage.getItem(CALL_ENVIRONMENT_STORAGE_KEY);
+  return isCallEnvironmentId(raw) ? raw : "teams";
+};
+
 const buildDeviceLabel = (device: MediaDeviceInfo, index: number) => {
   const label = device.label.trim();
   if (label) {
@@ -180,6 +196,9 @@ const MockInterview = () => {
   const [isRefreshingMediaDevices, setIsRefreshingMediaDevices] = useState(false);
   const [mediaDeviceMessage, setMediaDeviceMessage] = useState<string | null>(null);
   const [mediaDeviceLabelsAvailable, setMediaDeviceLabelsAvailable] = useState(false);
+  const [callEnvironment, setCallEnvironment] = useState<CallEnvironmentId>(
+    readStoredCallEnvironment
+  );
   const [activeQuestion, setActiveQuestion] = useState<{
     text: string;
     index: number;
@@ -196,6 +215,7 @@ const MockInterview = () => {
   const WS_BASE = getWsBase();
   const { endpoints, sessionType } = useSessionType();
   const { user, isConfigured: isSupabaseConfigured } = useAuth();
+  const selectedEnvironment = CALL_ENVIRONMENT_PRESETS[callEnvironment];
 
   const refreshMediaDevices = async (requestAccess = false) => {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -513,6 +533,10 @@ const MockInterview = () => {
   }, [mouthTrackingEnabled]);
 
   useEffect(() => {
+    window.localStorage.setItem(CALL_ENVIRONMENT_STORAGE_KEY, callEnvironment);
+  }, [callEnvironment]);
+
+  useEffect(() => {
     if (!navigator.mediaDevices?.enumerateDevices) {
       setMediaDeviceMessage("This browser cannot list microphones or cameras yet.");
       return;
@@ -769,6 +793,80 @@ const MockInterview = () => {
           </div>
 
           <div className="mb-6">
+            <div className="theme-panel rounded-2xl p-5 backdrop-blur">
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="theme-chip rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]">
+                      {sessionType === "pitch" ? "Pitch mode" : "Interview mode"}
+                    </span>
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${selectedEnvironment.accentClassName}`}
+                    >
+                      UI only simulator
+                    </span>
+                  </div>
+                  <h1 className="theme-text-primary text-2xl font-semibold">
+                    Room simulator
+                  </h1>
+                  <p className="theme-text-muted mt-2 max-w-3xl text-sm">
+                    Change the session stage to feel like Teams, Google Meet, a live
+                    audience, or a more formal broadcast setup. This only changes the
+                    interface, not the recording or scoring flow.
+                  </p>
+                </div>
+
+                <div className="theme-panel-soft rounded-2xl px-4 py-3">
+                  <p className="theme-text-dim text-xs uppercase tracking-[0.2em]">
+                    Current environment
+                  </p>
+                  <p className="theme-text-primary mt-1 text-base font-semibold">
+                    {selectedEnvironment.label}
+                  </p>
+                  <p className="theme-text-muted mt-1 text-sm">
+                    {selectedEnvironment.helperText}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                {CALL_ENVIRONMENT_OPTIONS.map((environment) => {
+                  const isActive = environment.id === callEnvironment;
+                  return (
+                    <button
+                      key={environment.id}
+                      type="button"
+                      onClick={() => setCallEnvironment(environment.id)}
+                      className={`rounded-2xl border p-4 text-left transition ${
+                        isActive ? "theme-choice-active" : "theme-choice theme-card-hover"
+                      }`}
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${environment.accentClassName}`}
+                        >
+                          {environment.shortLabel}
+                        </span>
+                        {isActive && (
+                          <span className="theme-text-primary text-xs font-semibold">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="theme-text-primary text-sm font-semibold">
+                        {environment.label}
+                      </p>
+                      <p className="theme-text-muted mt-2 text-xs leading-5">
+                        {environment.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-6">
             {user ? (
               <div className="theme-panel-soft rounded-2xl p-4">
                 <p className="theme-text-primary text-sm font-semibold">
@@ -871,6 +969,8 @@ const MockInterview = () => {
               ) : (
                 <WebRTCRecorder
                   mode={recordMode}
+                  sessionType={sessionType}
+                  callEnvironment={callEnvironment}
                   mouthTrackingEnabled={mouthTrackingEnabled}
                   selectedAudioInputId={mediaSelection.audioInputId}
                   selectedVideoInputId={mediaSelection.videoInputId}
@@ -987,6 +1087,8 @@ const MockInterview = () => {
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           recordMode={recordMode}
+          callEnvironment={callEnvironment}
+          onSetCallEnvironment={setCallEnvironment}
           setRecordMode={setRecordMode}
           mouthTrackingEnabled={mouthTrackingEnabled}
           onSetMouthTrackingEnabled={setMouthTrackingEnabled}
