@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,12 +26,21 @@ class Settings(BaseSettings):
     cors_allow_methods: list[str] = Field(default_factory=lambda: ["*"])
     cors_allow_headers: list[str] = Field(default_factory=lambda: ["*"])
     cors_allow_credentials: bool = True
+    webrtc_ice_servers: list[dict[str, Any]] = Field(
+        default_factory=lambda: [
+            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}
+        ]
+    )
+    webrtc_disconnect_grace_seconds: int = 15
+    webrtc_session_ttl_seconds: int = 300
+    ws_heartbeat_seconds: int = 20
 
     @field_validator(
         "cors_allow_origins",
         "ws_allowed_origins",
         "cors_allow_methods",
         "cors_allow_headers",
+        "webrtc_ice_servers",
         mode="before",
     )
     @classmethod
