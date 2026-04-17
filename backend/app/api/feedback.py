@@ -42,9 +42,7 @@ async def speech_feedback(sample: SpeechSample):
 
 @router.post("/video/feedback", response_model=VideoFeedbackResponse)
 async def video_feedback(sample: VideoSample):
-    print("\nhere\n")
     if not sample.frames:
-        print("\nhere1\n")
         raise HTTPException(status_code=400, detail="Provide at least one frame.")
 
     frames = [
@@ -55,6 +53,9 @@ async def video_feedback(sample: VideoSample):
             "smile_prob": frame.smile_prob,
             "head_yaw": frame.head_yaw,
             "head_pitch": frame.head_pitch,
+            "mouth_open_ratio": frame.mouth_open_ratio,
+            "mouth_movement_delta": frame.mouth_movement_delta,
+            "articulation_active": frame.articulation_active,
         }
         for frame in sample.frames
     ]

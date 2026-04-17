@@ -82,6 +82,15 @@ PRESENTATION_QUESTIONS = [
 ]
 
 
+def _normalize_call_type(value: str | None) -> str:
+    raw = (value or "interview").strip().lower()
+    if any(keyword in raw for keyword in ["sale", "discovery", "demo"]):
+        return "sales"
+    if any(keyword in raw for keyword in ["pitch", "presentation", "investor", "stakeholder"]):
+        return "presentation"
+    return "interview"
+
+
 def _detect_role(request: QuestionRequest) -> str:
     role_text = (request.role or "").lower()
     if any(k in role_text for k in ["backend", "api", "server", "fastapi", "django"]):
@@ -103,7 +112,7 @@ def generate_questions(request: QuestionRequest) -> Tuple[List[QuestionItem], Li
     warnings: List[str] = []
     used_inputs: List[str] = []
 
-    call_type = (request.call_type or "interview").strip().lower()
+    call_type = _normalize_call_type(request.call_type)
     role_key = _detect_role(request)
 
     used_inputs.append(f"call_type:{call_type}")

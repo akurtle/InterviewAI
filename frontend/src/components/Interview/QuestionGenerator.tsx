@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithLoopbackFallback, getApiBase } from "../../network";
 import type { GeneratedQuestion, QuestionAnswerReview } from "./types";
 
+type SessionType = "interview" | "pitch";
+
 type QuestionGeneratorProps = {
   apiBase?: string;
   endpointPath?: string;
+  sessionType?: SessionType;
   onQuestions?: (questions: GeneratedQuestion[], raw: unknown) => void;
   onAnswersChange?: (answers: QuestionAnswerReview[]) => void;
   onInputChange?: (inputs: { role: string; company: string; callType: string }) => void;
@@ -23,11 +26,74 @@ type QuestionResponse = {
   };
 };
 
+type ContextPreset = {
+  value: string;
+  label: string;
+  description: string;
+};
+
 const defaultApiBase = getApiBase();
+
+const INTERVIEW_PRESETS: ContextPreset[] = [
+  {
+    value: "behavioral_interview",
+    label: "Behavioral Interview",
+    description: "Practice story-driven answers about teamwork, ownership, and impact.",
+  },
+  {
+    value: "technical_interview",
+    label: "Technical Interview",
+    description: "Prepare for architecture, debugging, and implementation-style questions.",
+  },
+  {
+    value: "hiring_manager_interview",
+    label: "Hiring Manager Interview",
+    description: "Focus on role fit, priorities, and how you would add value quickly.",
+  },
+  {
+    value: "panel_interview",
+    label: "Panel Interview",
+    description: "Train for mixed stakeholder questions and switching context smoothly.",
+  },
+];
+
+const PITCH_PRESETS: ContextPreset[] = [
+  {
+    value: "sales_pitch",
+    label: "Sales Pitch",
+    description: "Practice positioning, value articulation, and objection handling.",
+  },
+  {
+    value: "product_demo",
+    label: "Product Demo",
+    description: "Rehearse a walkthrough that ties features back to outcomes.",
+  },
+  {
+    value: "stakeholder_presentation",
+    label: "Stakeholder Presentation",
+    description: "Prepare for a structured presentation with strategic questions.",
+  },
+  {
+    value: "investor_pitch",
+    label: "Investor Pitch",
+    description: "Focus on traction, market story, and high-stakes follow-up questions.",
+  },
+];
+
+const getPresetsForSession = (sessionType: SessionType) =>
+  sessionType === "pitch" ? PITCH_PRESETS : INTERVIEW_PRESETS;
+
+const getDefaultCallType = (sessionType: SessionType) =>
+  getPresetsForSession(sessionType)[0]?.value ?? "interview";
+
+const getCallTypeLabel = (sessionType: SessionType, callType: string) =>
+  getPresetsForSession(sessionType).find((preset) => preset.value === callType)?.label ??
+  (sessionType === "pitch" ? "Pitch Session" : "Interview");
 
 export default function QuestionGenerator({
   apiBase = defaultApiBase,
   endpointPath = "/questions/generate",
+  sessionType = "interview",
   onQuestions,
   onAnswersChange,
   onInputChange,
@@ -38,7 +104,7 @@ export default function QuestionGenerator({
   const endpoint = useMemo(() => `${apiBase}${endpointPath}`, [apiBase, endpointPath]);
   const [role, setRole] = useState("");
   const [company, setCompany] = useState("");
-  const [callType, setCallType] = useState("");
+  const [callType, setCallType] = useState(getDefaultCallType(sessionType));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
@@ -54,6 +120,20 @@ export default function QuestionGenerator({
   const questionStartRef = useRef<number | null>(null);
   const transcriptStartIndexRef = useRef<number>(0);
   const startSignalRef = useRef<number | null>(null);
+  const contextPresets = useMemo(() => getPresetsForSession(sessionType), [sessionType]);
+  const currentPreset =
+    contextPresets.find((preset) => preset.value === callType) ?? contextPresets[0];
+  const roleLabel = sessionType === "pitch" ? "What are you pitching?" : "Target role";
+  const companyLabel = sessionType === "pitch" ? "Audience or company" : "Company";
+  const rolePlaceholder =
+    sessionType === "pitch" ? "AI interview copilot for recruiting teams" : "Senior Frontend Engineer";
+  const companyPlaceholder =
+    sessionType === "pitch" ? "Hiring leaders at growth-stage startups" : "Acme Inc.";
+  const generatorTitle = sessionType === "pitch" ? "Pitch Generator" : "Question Generator";
+  const generatorSubtitle =
+    sessionType === "pitch"
+      ? "Build a tailored practice set for the kind of pitch you chose at the start."
+      : "Build a tailored practice set for the interview format you chose at the start.";
 
   const normalizeItem = (item: string | GeneratedQuestion): GeneratedQuestion | null => {
     if (typeof item === "string") {
@@ -144,8 +224,14 @@ export default function QuestionGenerator({
   }, [questions]);
 
   useEffect(() => {
-    onInputChange?.({ role, company, callType });
-  }, [role, company, callType, onInputChange]);
+    if (!contextPresets.some((preset) => preset.value === callType)) {
+      setCallType(getDefaultCallType(sessionType));
+    }
+  }, [callType, contextPresets, sessionType]);
+
+  useEffect(() => {
+    onInputChange?.({ role, company, callType: getCallTypeLabel(sessionType, callType) });
+  }, [role, company, callType, onInputChange, sessionType]);
 
   useEffect(() => {
     onAnswersChange?.(answers);
@@ -258,7 +344,11 @@ export default function QuestionGenerator({
 
   const handleGenerate = async () => {
     if (!role.trim()) {
-      setError("Add a role to generate questions.");
+      setError(
+        sessionType === "pitch"
+          ? "Add what you want to pitch before generating prompts."
+          : "Add a target role before generating questions."
+      );
       return;
     }
 
@@ -273,7 +363,7 @@ export default function QuestionGenerator({
     const payload = {
       role: role.trim() || undefined,
       company: company.trim() || undefined,
-      call_type: callType.trim() || undefined,
+      call_type: getCallTypeLabel(sessionType, callType),
     };
 
     try {
@@ -295,13 +385,13 @@ export default function QuestionGenerator({
       setWarnings(Array.isArray(data?.warnings) ? data.warnings : []);
       setRawResponse(data);
       onQuestions?.(sorted, data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof TypeError) {
         setError(
           `Unable to reach the question API at ${endpoint}. Make sure the backend is running and that VITE_API_BASE points to the correct host.`
         );
       } else {
-        setError(err?.message ?? "Failed to generate questions.");
+        setError(err instanceof Error ? err.message : "Failed to generate questions.");
       }
     } finally {
       setIsLoading(false);
@@ -353,47 +443,77 @@ export default function QuestionGenerator({
     <div className="theme-panel rounded-2xl p-6 backdrop-blur">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="theme-text-primary text-lg font-semibold">Question Generator</h2>
-          <p className="theme-text-muted text-xs">
-            Generate tailored questions for interviews, sales calls, or presentations.
-          </p>
+          <h2 className="theme-text-primary text-lg font-semibold">{generatorTitle}</h2>
+          <p className="theme-text-muted text-xs">{generatorSubtitle}</p>
         </div>
       </div>
 
       <div className="space-y-3">
+        <div className="theme-panel-soft rounded-2xl p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="theme-text-primary text-sm font-semibold">
+                {sessionType === "pitch" ? "Pitch Brief" : "Interview Brief"}
+              </p>
+              <p className="theme-text-muted mt-1 text-xs">
+                {sessionType === "pitch"
+                  ? "This section now adapts to the pitch format selected at the start."
+                  : "This section now adapts to the interview format selected at the start."}
+              </p>
+            </div>
+            <span className="theme-chip rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
+              {sessionType}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {contextPresets.map((preset) => {
+              const isSelected = preset.value === callType;
+              return (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => setCallType(preset.value)}
+                  className={`rounded-xl border px-4 py-3 text-left transition ${
+                    isSelected ? "theme-choice-active" : "theme-button-secondary"
+                  }`}
+                >
+                  <p className="theme-text-primary text-sm font-semibold">{preset.label}</p>
+                  <p className="theme-text-muted mt-1 text-xs">{preset.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2">
           <div>
-            <label className="theme-text-muted text-xs">Role</label>
+            <label className="theme-text-muted text-xs">{roleLabel}</label>
             <input
               type="text"
               value={role}
               onChange={(event) => setRole(event.target.value)}
-              placeholder="Account Executive"
+              placeholder={rolePlaceholder}
               className="theme-input mt-1 w-full rounded-lg px-3 py-2 text-sm"
             />
           </div>
 
           <div>
-            <label className="theme-text-muted text-xs">Company</label>
+            <label className="theme-text-muted text-xs">{companyLabel}</label>
             <input
               type="text"
               value={company}
               onChange={(event) => setCompany(event.target.value)}
-              placeholder="Acme Inc."
+              placeholder={companyPlaceholder}
               className="theme-input mt-1 w-full rounded-lg px-3 py-2 text-sm"
             />
           </div>
         </div>
 
-        <div>
-          <label className="theme-text-muted text-xs">Interview or call type</label>
-          <input
-            type="text"
-            value={callType}
-            onChange={(event) => setCallType(event.target.value)}
-            placeholder="Panel interview, discovery call, demo presentation"
-            className="theme-input mt-1 w-full rounded-lg px-3 py-2 text-sm"
-          />
+        <div className="theme-panel-soft rounded-2xl p-4">
+          <p className="theme-text-dim text-xs uppercase tracking-wide">Selected format</p>
+          <p className="theme-text-primary mt-2 text-sm font-semibold">{currentPreset?.label}</p>
+          <p className="theme-text-muted mt-1 text-xs">{currentPreset?.description}</p>
         </div>
       </div>
 
@@ -414,14 +534,18 @@ export default function QuestionGenerator({
               : "theme-button-primary"
           }`}
         >
-          {isLoading ? "Generating..." : "Generate Questions"}
+          {isLoading
+            ? "Generating..."
+            : sessionType === "pitch"
+              ? "Generate Pitch Prompts"
+              : "Generate Questions"}
         </button>
         <button
           type="button"
           onClick={() => {
             setRole("");
             setCompany("");
-            setCallType("");
+            setCallType(getDefaultCallType(sessionType));
             setQuestions([]);
             setUsedInputs([]);
             setWarnings([]);
@@ -590,7 +714,9 @@ export default function QuestionGenerator({
           </pre>
         ) : (
           <p className="theme-text-dim text-sm">
-            Add a role, company, or call type to generate a tailored question set.
+            {sessionType === "pitch"
+              ? "Choose your pitch format, add the topic and audience, and generate a tailored prompt set."
+              : "Choose your interview format, add the role and company, and generate a tailored question set."}
           </p>
         )}
       </div>

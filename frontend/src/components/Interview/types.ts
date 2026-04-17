@@ -34,6 +34,9 @@ export type VisionFrame = {
   smile_prob?: number | null;
   head_yaw?: number | null;
   head_pitch?: number | null;
+  mouth_open_ratio?: number | null;
+  mouth_movement_delta?: number | null;
+  articulation_active?: boolean | null;
 };
 
 export type SessionRecording = {
@@ -41,6 +44,21 @@ export type SessionRecording = {
   mimeType: string;
   size: number;
   durationSeconds: number | null;
+};
+
+export type MediaDeviceOption = {
+  deviceId: string;
+  label: string;
+};
+
+export type MediaDeviceCatalog = {
+  audioInputs: MediaDeviceOption[];
+  videoInputs: MediaDeviceOption[];
+};
+
+export type MediaDeviceSelection = {
+  audioInputId: string;
+  videoInputId: string;
 };
 
 export type StartupMetricKey =

@@ -1,21 +1,94 @@
 import asyncio
 import json
+import logging
+import math
 import re
-from typing import Any, Dict
+import time
+from typing import Any, Dict, Iterable
 
-import numpy as np
 from fastapi import WebSocket
-from faster_whisper import WhisperModel
-from app.realtime_state import ws_clients
+
+from app.realtime_state import sessions, ws_clients
+
+try:
+    import mediapipe as mp
+except ImportError:  # pragma: no cover - optional dependency during local setup
+    mp = None
 
 
-#model = WhisperModel("tiny.en", device="cpu", compute_type="int8")  # or "cpu"
+logger = logging.getLogger(__name__)
+
+VISION_SAMPLE_INTERVAL_SECONDS = 0.45
+MOUTH_LEFT_INDEX = 61
+MOUTH_RIGHT_INDEX = 291
+MOUTH_TOP_INDEX = 13
+MOUTH_BOTTOM_INDEX = 14
+LEFT_EYE_INDEX = 33
+RIGHT_EYE_INDEX = 263
+NOSE_TIP_INDEX = 1
 
 
 async def safe_send(session_id: str, message: Dict[str, Any]):
     ws = ws_clients.get(session_id)
     if ws:
         await ws.send_text(json.dumps(message))
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def _distance(point_a: Any, point_b: Any) -> float:
+    return math.hypot(point_a.x - point_b.x, point_a.y - point_b.y)
+
+
+def _mean(values: Iterable[float]) -> float:
+    numbers = list(values)
+    if not numbers:
+        return 0.0
+    return sum(numbers) / len(numbers)
+
+
+def _build_face_metrics(face_landmarks: Any, previous_mouth_ratio: float | None) -> Dict[str, float | bool | None]:
+    landmarks = face_landmarks.landmark
+
+    mouth_left = landmarks[MOUTH_LEFT_INDEX]
+    mouth_right = landmarks[MOUTH_RIGHT_INDEX]
+    mouth_top = landmarks[MOUTH_TOP_INDEX]
+    mouth_bottom = landmarks[MOUTH_BOTTOM_INDEX]
+    left_eye = landmarks[LEFT_EYE_INDEX]
+    right_eye = landmarks[RIGHT_EYE_INDEX]
+    nose_tip = landmarks[NOSE_TIP_INDEX]
+
+    mouth_width = max(_distance(mouth_left, mouth_right), 1e-6)
+    mouth_open_ratio = _distance(mouth_top, mouth_bottom) / mouth_width
+    mouth_movement_delta = (
+        None if previous_mouth_ratio is None else abs(mouth_open_ratio - previous_mouth_ratio)
+    )
+
+    eye_center_x = _mean([left_eye.x, right_eye.x])
+    eye_center_y = _mean([left_eye.y, right_eye.y])
+    mouth_center_y = _mean([mouth_top.y, mouth_bottom.y])
+    eye_span = max(abs(right_eye.x - left_eye.x), 1e-6)
+    vertical_span = max(abs(mouth_center_y - eye_center_y), 1e-6)
+
+    head_yaw = _clamp(((nose_tip.x - eye_center_x) / eye_span) * 55.0, -30.0, 30.0)
+    pitch_center = eye_center_y + vertical_span * 0.45
+    head_pitch = _clamp(((nose_tip.y - pitch_center) / vertical_span) * 65.0, -20.0, 20.0)
+    looking_at_camera = abs(head_yaw) <= 12.0 and abs(head_pitch) <= 10.0
+
+    articulation_active = mouth_open_ratio >= 0.12 or (mouth_movement_delta or 0.0) >= 0.025
+
+    return {
+        "looking_at_camera": looking_at_camera,
+        "head_yaw": round(head_yaw, 4),
+        "head_pitch": round(head_pitch, 4),
+        "mouth_open_ratio": round(mouth_open_ratio, 4),
+        "mouth_movement_delta": None
+        if mouth_movement_delta is None
+        else round(mouth_movement_delta, 4),
+        "articulation_active": articulation_active,
+    }
 
 # async def run_audio_pipeline(session_id: str, track):
 #     audio_buffer = []
@@ -67,11 +140,121 @@ async def safe_send(session_id: str, message: Dict[str, Any]):
 
     
 async def run_video_pipeline(session_id: str, track):
-    await safe_send(session_id, {"type": "status", "stage": "video", "message": "Video track connected"})
-    # while True:
-        # frame = await track.recv()  # video frame
-        # TODO: convert frame to ndarray and run your model
-        # await safe_send(session_id, {"type":"vision", "face_present": True, ...})
+    await safe_send(
+        session_id,
+        {"type": "vision_status", "source": "server", "message": "Video track connected."},
+    )
+
+    session = sessions.get(session_id)
+    if session and not session.mouth_tracking_enabled:
+        await safe_send(
+            session_id,
+            {
+                "type": "vision_status",
+                "source": "server",
+                "message": "Backend mouth tracking is disabled for this session.",
+            },
+        )
+        return
+
+    if mp is None:
+        await safe_send(
+            session_id,
+            {
+                "type": "vision_status",
+                "source": "server",
+                "message": "MediaPipe is not installed, so backend mouth tracking is unavailable.",
+            },
+        )
+        return
+
+    face_mesh = mp.solutions.face_mesh.FaceMesh(
+        static_image_mode=False,
+        max_num_faces=1,
+        refine_landmarks=True,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5,
+    )
+    last_processed_at = 0.0
+    previous_mouth_ratio: float | None = None
+
+    try:
+        while True:
+            frame = await track.recv()
+            now = time.monotonic()
+            if now - last_processed_at < VISION_SAMPLE_INTERVAL_SECONDS:
+                continue
+            last_processed_at = now
+
+            image = frame.to_ndarray(format="rgb24")
+            results = await asyncio.to_thread(face_mesh.process, image)
+            timestamp = getattr(frame, "time", None)
+            frame_timestamp = float(timestamp) if isinstance(timestamp, (int, float)) else time.time()
+
+            if not results.multi_face_landmarks:
+                previous_mouth_ratio = None
+                await safe_send(
+                    session_id,
+                    {
+                        "type": "vision",
+                        "source": "server",
+                        "frame": {
+                            "timestamp": frame_timestamp,
+                            "face_present": False,
+                            "looking_at_camera": False,
+                            "smile_prob": None,
+                            "head_yaw": None,
+                            "head_pitch": None,
+                            "mouth_open_ratio": None,
+                            "mouth_movement_delta": None,
+                            "articulation_active": None,
+                        },
+                    },
+                )
+                continue
+
+            metrics = _build_face_metrics(
+                results.multi_face_landmarks[0],
+                previous_mouth_ratio=previous_mouth_ratio,
+            )
+            previous_mouth_ratio = (
+                float(metrics["mouth_open_ratio"])
+                if isinstance(metrics["mouth_open_ratio"], (int, float))
+                else None
+            )
+
+            await safe_send(
+                session_id,
+                {
+                    "type": "vision",
+                    "source": "server",
+                    "frame": {
+                        "timestamp": frame_timestamp,
+                        "face_present": True,
+                        "looking_at_camera": metrics["looking_at_camera"],
+                        "smile_prob": None,
+                        "head_yaw": metrics["head_yaw"],
+                        "head_pitch": metrics["head_pitch"],
+                        "mouth_open_ratio": metrics["mouth_open_ratio"],
+                        "mouth_movement_delta": metrics["mouth_movement_delta"],
+                        "articulation_active": metrics["articulation_active"],
+                    },
+                },
+            )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("Backend video pipeline crashed for session %s", session_id)
+        await safe_send(
+            session_id,
+            {
+                "type": "vision_status",
+                "source": "server",
+                "message": "Backend mouth tracking stopped unexpectedly.",
+            },
+        )
+    finally:
+        face_mesh.close()
 
 
 async def send_results(ws: WebSocket, gen):

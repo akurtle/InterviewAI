@@ -58,6 +58,10 @@ type RecorderMessage = {
 
 type Props = {
   mode?: RecordMode;
+  mouthTrackingEnabled?: boolean;
+  selectedAudioInputId?: string;
+  selectedVideoInputId?: string;
+  onPreferredDevicesUnavailable?: (kinds: Array<"audioinput" | "videoinput">) => void;
   onStatusChange?: (status: ConnectionStatus) => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
   onVisionData?: (data: unknown) => void;
@@ -88,6 +92,39 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
 const DEFAULT_RESULTS_HEARTBEAT_SECONDS = 20;
 const RESULTS_RECONNECT_DELAYS_MS = [1000, 2000, 5000];
 
+const isRecoverableDeviceSelectionError = (error: unknown) =>
+  error instanceof DOMException &&
+  (error.name === "NotFoundError" || error.name === "OverconstrainedError");
+
+const buildMediaConstraints = ({
+  mode,
+  selectedAudioInputId,
+  selectedVideoInputId,
+  usePreferredDeviceIds,
+}: {
+  mode: RecordMode;
+  selectedAudioInputId?: string;
+  selectedVideoInputId?: string;
+  usePreferredDeviceIds: boolean;
+}): MediaStreamConstraints => ({
+  audio:
+    mode === "audio" || mode === "both"
+      ? selectedAudioInputId && usePreferredDeviceIds
+        ? { deviceId: { exact: selectedAudioInputId } }
+        : true
+      : false,
+  video:
+    mode === "video" || mode === "both"
+      ? {
+          ...(selectedVideoInputId && usePreferredDeviceIds
+            ? { deviceId: { exact: selectedVideoInputId } }
+            : {}),
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        }
+      : false,
+});
+
 const waitForIceGatheringComplete = (pc: RTCPeerConnection, timeoutMs = 2500) =>
   new Promise<void>((resolve) => {
     if (pc.iceGatheringState === "complete") {
@@ -117,6 +154,10 @@ const waitForIceGatheringComplete = (pc: RTCPeerConnection, timeoutMs = 2500) =>
 
 const WebRTCRecorder: React.FC<Props> = ({
   mode = "both",
+  mouthTrackingEnabled = true,
+  selectedAudioInputId,
+  selectedVideoInputId,
+  onPreferredDevicesUnavailable,
   onStatusChange,
   onTranscript,
   onVisionData,
@@ -402,7 +443,7 @@ const WebRTCRecorder: React.FC<Props> = ({
           return;
         }
 
-        if (msg.type === "vision") {
+        if (msg.type === "vision" || msg.type === "vision_status") {
           onVisionData?.(msg);
           return;
         }
@@ -570,16 +611,40 @@ const WebRTCRecorder: React.FC<Props> = ({
 
     try {
       const config = await loadWebRtcConfig();
+      const preferredKinds: Array<"audioinput" | "videoinput"> = [];
+      if ((mode === "audio" || mode === "both") && selectedAudioInputId) {
+        preferredKinds.push("audioinput");
+      }
+      if ((mode === "video" || mode === "both") && selectedVideoInputId) {
+        preferredKinds.push("videoinput");
+      }
 
-      const constraints: MediaStreamConstraints = {
-        audio: mode === "audio" || mode === "both",
-        video:
-          mode === "video" || mode === "both"
-            ? { width: { ideal: 1280 }, height: { ideal: 720 } }
-            : false,
-      };
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(
+          buildMediaConstraints({
+            mode,
+            selectedAudioInputId,
+            selectedVideoInputId,
+            usePreferredDeviceIds: true,
+          })
+        );
+      } catch (mediaError) {
+        if (!preferredKinds.length || !isRecoverableDeviceSelectionError(mediaError)) {
+          throw mediaError;
+        }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        stream = await navigator.mediaDevices.getUserMedia(
+          buildMediaConstraints({
+            mode,
+            selectedAudioInputId,
+            selectedVideoInputId,
+            usePreferredDeviceIds: false,
+          })
+        );
+        onPreferredDevicesUnavailable?.(preferredKinds);
+      }
+
       streamRef.current = stream;
       onStreamReady?.(stream);
       onStartupMetric?.("media_stream_ready_ms");
@@ -675,6 +740,7 @@ const WebRTCRecorder: React.FC<Props> = ({
           sdp: pc.localDescription?.sdp,
           type: pc.localDescription?.type,
           session_id: nextSessionId,
+          mouth_tracking_enabled: mouthTrackingEnabled,
         }),
       });
 

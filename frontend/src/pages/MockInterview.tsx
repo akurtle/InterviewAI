@@ -8,6 +8,8 @@ import FeedbackPanel from "../components/Interview/FeedbackPanel";
 import SettingsModal from "../components/Interview/SettingsModal";
 import type {
   GeneratedQuestion,
+  MediaDeviceCatalog,
+  MediaDeviceSelection,
   QuestionAnswerReview,
   RecordMode,
   SessionRecording,
@@ -21,6 +23,9 @@ import { useSessionType } from "../hooks/useSessionType";
 import { useFeedbackRequests } from "../hooks/useFeedbackRequests";
 import { getApiBase, getWsBase } from "../network";
 import { saveInterviewSession, type SessionQuestionContext } from "../sessionStore";
+
+const MEDIA_SELECTION_STORAGE_KEY = "interview-ai:selected-media-devices";
+const MOUTH_TRACKING_STORAGE_KEY = "interview-ai:mouth-tracking-enabled";
 
 const parseTimestampSeconds = (value: unknown): number => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -75,6 +80,54 @@ const createEmptyStartupMetrics = (): StartupMetrics => ({
   session_ready_ms: null,
 });
 
+const createEmptyMediaDeviceCatalog = (): MediaDeviceCatalog => ({
+  audioInputs: [],
+  videoInputs: [],
+});
+
+const readStoredMediaSelection = (): MediaDeviceSelection => {
+  if (typeof window === "undefined") {
+    return { audioInputId: "", videoInputId: "" };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(MEDIA_SELECTION_STORAGE_KEY);
+    if (!raw) {
+      return { audioInputId: "", videoInputId: "" };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<MediaDeviceSelection>;
+    return {
+      audioInputId: typeof parsed.audioInputId === "string" ? parsed.audioInputId : "",
+      videoInputId: typeof parsed.videoInputId === "string" ? parsed.videoInputId : "",
+    };
+  } catch {
+    return { audioInputId: "", videoInputId: "" };
+  }
+};
+
+const readStoredMouthTrackingEnabled = () => {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const raw = window.localStorage.getItem(MOUTH_TRACKING_STORAGE_KEY);
+  if (raw === null) {
+    return true;
+  }
+
+  return raw !== "false";
+};
+
+const buildDeviceLabel = (device: MediaDeviceInfo, index: number) => {
+  const label = device.label.trim();
+  if (label) {
+    return label;
+  }
+
+  return device.kind === "audioinput" ? `Microphone ${index + 1}` : `Camera ${index + 1}`;
+};
+
 const computeSessionReadyMs = (metrics: StartupMetrics, mode: RecordMode) => {
   if (mode === "audio") {
     return metrics.asr_recording_ready_ms;
@@ -92,6 +145,11 @@ const computeSessionReadyMs = (metrics: StartupMetrics, mode: RecordMode) => {
   }
 
   return null;
+};
+
+const formatPercent = (value: number | null) => {
+  if (value === null) return "N/A";
+  return `${Math.round(value * 100)}%`;
 };
 
 const MockInterview = () => {
@@ -114,6 +172,14 @@ const MockInterview = () => {
   const [, setSessionRecording] = useState<SessionRecording | null>(null);
   const [sharedMediaStream, setSharedMediaStream] = useState<MediaStream | null>(null);
   const [startupMetrics, setStartupMetrics] = useState<StartupMetrics>(createEmptyStartupMetrics);
+  const [mediaDevices, setMediaDevices] = useState<MediaDeviceCatalog>(createEmptyMediaDeviceCatalog);
+  const [mediaSelection, setMediaSelection] = useState<MediaDeviceSelection>(readStoredMediaSelection);
+  const [mouthTrackingEnabled, setMouthTrackingEnabled] = useState<boolean>(
+    readStoredMouthTrackingEnabled
+  );
+  const [isRefreshingMediaDevices, setIsRefreshingMediaDevices] = useState(false);
+  const [mediaDeviceMessage, setMediaDeviceMessage] = useState<string | null>(null);
+  const [mediaDeviceLabelsAvailable, setMediaDeviceLabelsAvailable] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<{
     text: string;
     index: number;
@@ -125,10 +191,108 @@ const MockInterview = () => {
   const sessionStartedAtRef = useRef<number | null>(null);
   const persistedSessionKeyRef = useRef<string>("");
   const sessionRecordingRef = useRef<SessionRecording | null>(null);
+  const mediaSelectionRef = useRef(mediaSelection);
   const API_BASE = getApiBase();
   const WS_BASE = getWsBase();
   const { endpoints, sessionType } = useSessionType();
   const { user, isConfigured: isSupabaseConfigured } = useAuth();
+
+  const refreshMediaDevices = async (requestAccess = false) => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setMediaDeviceMessage("This browser cannot list microphones or cameras yet.");
+      return;
+    }
+
+    setIsRefreshingMediaDevices(true);
+
+    try {
+      if (requestAccess && navigator.mediaDevices.getUserMedia) {
+        const attempts: MediaStreamConstraints[] = [
+          { audio: true, video: true },
+          { audio: true, video: false },
+          { audio: false, video: true },
+        ];
+
+        let permissionError: unknown = null;
+
+        for (const constraints of attempts) {
+          try {
+            const permissionStream = await navigator.mediaDevices.getUserMedia(constraints);
+            permissionStream.getTracks().forEach((track) => track.stop());
+            permissionError = null;
+            break;
+          } catch (error) {
+            permissionError = error;
+          }
+        }
+
+        if (permissionError) {
+          throw permissionError;
+        }
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices
+        .filter((device) => device.kind === "audioinput")
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: buildDeviceLabel(device, index),
+        }));
+      const videoInputs = devices
+        .filter((device) => device.kind === "videoinput")
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: buildDeviceLabel(device, index),
+        }));
+      const labelsAvailable = devices.some(
+        (device) =>
+          (device.kind === "audioinput" || device.kind === "videoinput") &&
+          device.label.trim().length > 0
+      );
+
+      setMediaDevices({ audioInputs, videoInputs });
+      setMediaDeviceLabelsAvailable(labelsAvailable);
+
+      const currentSelection = mediaSelectionRef.current;
+      const nextSelection: MediaDeviceSelection = {
+        audioInputId: audioInputs.some((device) => device.deviceId === currentSelection.audioInputId)
+          ? currentSelection.audioInputId
+          : "",
+        videoInputId: videoInputs.some((device) => device.deviceId === currentSelection.videoInputId)
+          ? currentSelection.videoInputId
+          : "",
+      };
+
+      const lostAudioSelection =
+        Boolean(currentSelection.audioInputId) && nextSelection.audioInputId !== currentSelection.audioInputId;
+      const lostVideoSelection =
+        Boolean(currentSelection.videoInputId) && nextSelection.videoInputId !== currentSelection.videoInputId;
+
+      if (lostAudioSelection || lostVideoSelection) {
+        setMediaSelection(nextSelection);
+        setMediaDeviceMessage(
+          "A selected external device is no longer available. The app will use your default device until you choose another one."
+        );
+      } else if (requestAccess && labelsAvailable) {
+        setMediaDeviceMessage("Device list updated. Your external microphones and cameras are ready to use.");
+      } else if (!labelsAvailable) {
+        setMediaDeviceMessage(
+          "Allow camera or microphone access once to reveal device names for external devices."
+        );
+      } else {
+        setMediaDeviceMessage(null);
+      }
+    } catch (error) {
+      console.error("Failed to refresh media devices:", error);
+      setMediaDeviceMessage(
+        error instanceof Error
+          ? error.message
+          : "The browser could not refresh the available microphones and cameras."
+      );
+    } finally {
+      setIsRefreshingMediaDevices(false);
+    }
+  };
 
   const handleTranscript = (text: string, isFinal: boolean) => {
     // console.log("Transcript:", text, "Final:", isFinal);
@@ -225,6 +389,12 @@ const MockInterview = () => {
         frame.headYaw,
         frame.head_pitch,
         frame.headPitch,
+        frame.mouth_open_ratio,
+        frame.mouthOpenRatio,
+        frame.mouth_movement_delta,
+        frame.mouthMovementDelta,
+        frame.articulation_active,
+        frame.articulationActive,
       ].some((value) => value !== undefined && value !== null);
 
     if (!facePresent && parseOptionalBoolean(frame.face_present ?? frame.facePresent) === null) {
@@ -236,6 +406,14 @@ const MockInterview = () => {
     const smileProb = parseOptionalNumber(frame.smile_prob ?? frame.smileProb);
     const headYaw = parseOptionalNumber(frame.head_yaw ?? frame.headYaw);
     const headPitch = parseOptionalNumber(frame.head_pitch ?? frame.headPitch);
+    const mouthOpenRatio = parseOptionalNumber(
+      frame.mouth_open_ratio ?? frame.mouthOpenRatio
+    );
+    const mouthMovementDelta = parseOptionalNumber(
+      frame.mouth_movement_delta ?? frame.mouthMovementDelta
+    );
+    const articulationActive =
+      parseOptionalBoolean(frame.articulation_active ?? frame.articulationActive);
 
     return {
       timestamp: parseTimestampSeconds(frame.timestamp),
@@ -244,8 +422,61 @@ const MockInterview = () => {
       smile_prob: smileProb,
       head_yaw: headYaw,
       head_pitch: headPitch,
+      mouth_open_ratio: mouthOpenRatio,
+      mouth_movement_delta: mouthMovementDelta,
+      articulation_active: articulationActive,
     };
   };
+
+  const recentMouthFrames = visionFrames.filter(
+    (frame) =>
+      mouthTrackingEnabled &&
+      (
+        typeof frame.mouth_open_ratio === "number" ||
+        typeof frame.mouth_movement_delta === "number" ||
+        typeof frame.articulation_active === "boolean"
+      )
+  );
+  const latestMouthFrame =
+    recentMouthFrames.length > 0 ? recentMouthFrames[recentMouthFrames.length - 1] : null;
+  const mouthFramesWindow = recentMouthFrames.slice(-8);
+  const mouthOpenSamples = mouthFramesWindow.filter(
+    (frame) => typeof frame.mouth_open_ratio === "number"
+  );
+  const mouthMovementSamples = mouthFramesWindow.filter(
+    (frame) => typeof frame.mouth_movement_delta === "number"
+  );
+  const liveMouthOpenRatio =
+    mouthOpenSamples.length > 0
+      ? mouthFramesWindow.reduce(
+          (sum, frame) => sum + (frame.mouth_open_ratio ?? 0),
+          0
+        ) / mouthOpenSamples.length
+      : null;
+  const liveArticulationRate =
+    mouthFramesWindow.length > 0
+      ? mouthFramesWindow.filter((frame) => frame.articulation_active === true).length /
+        mouthFramesWindow.length
+      : null;
+  const liveMouthMovement =
+    mouthMovementSamples.length > 0
+      ? mouthFramesWindow.reduce(
+          (sum, frame) => sum + (frame.mouth_movement_delta ?? 0),
+          0
+        ) / mouthMovementSamples.length
+      : null;
+  const liveArticulationStatus =
+    latestMouthFrame === null
+      ? "Waiting for backend mouth tracking..."
+      : latestMouthFrame.articulation_active
+        ? "Good visible articulation"
+        : "Mouth movement looks limited";
+  const liveArticulationTone =
+    latestMouthFrame?.articulation_active === true
+      ? "text-emerald-300"
+      : latestMouthFrame
+        ? "text-yellow-300"
+        : "theme-text-muted";
 
   const audioStatusLabel =
     audioStatus === "recording"
@@ -269,6 +500,37 @@ const MockInterview = () => {
 
   const isSessionLocked = connectionStatus === "connected" || connectionStatus === "connecting";
 
+  useEffect(() => {
+    mediaSelectionRef.current = mediaSelection;
+    window.localStorage.setItem(MEDIA_SELECTION_STORAGE_KEY, JSON.stringify(mediaSelection));
+  }, [mediaSelection]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      MOUTH_TRACKING_STORAGE_KEY,
+      mouthTrackingEnabled ? "true" : "false"
+    );
+  }, [mouthTrackingEnabled]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setMediaDeviceMessage("This browser cannot list microphones or cameras yet.");
+      return;
+    }
+
+    void refreshMediaDevices();
+
+    const mediaDevicesApi = navigator.mediaDevices;
+    const handleDeviceChange = () => {
+      void refreshMediaDevices();
+    };
+
+    mediaDevicesApi.addEventListener?.("devicechange", handleDeviceChange);
+
+    return () => {
+      mediaDevicesApi.removeEventListener?.("devicechange", handleDeviceChange);
+    };
+  }, []);
 
   const handleVisionData = (data: any) => {
     console.log("Vision data:", data);
@@ -281,13 +543,37 @@ const MockInterview = () => {
     }
   };
 
+  const handlePreferredDevicesUnavailable = (kinds: Array<"audioinput" | "videoinput">) => {
+    setMediaSelection((current) => ({
+      audioInputId: kinds.includes("audioinput") ? "" : current.audioInputId,
+      videoInputId: kinds.includes("videoinput") ? "" : current.videoInputId,
+    }));
+
+    if (kinds.length === 2) {
+      setMediaDeviceMessage(
+        "Your selected external microphone and camera were unavailable, so the app switched back to the system defaults."
+      );
+      return;
+    }
+
+    const label = kinds[0] === "audioinput" ? "microphone" : "camera";
+    setMediaDeviceMessage(
+      `Your selected external ${label} was unavailable, so the app switched back to the system default.`
+    );
+  };
+
   const handleAudioToggle = async () => {
     if (isAudioRunning) {
       stopAudio();
       return;
     }
     beginSession();
-    await startAudio();
+    await startAudio(undefined, {
+      audioDeviceId: mediaSelection.audioInputId,
+      onPreferredDeviceUnavailable: () => {
+        handlePreferredDevicesUnavailable(["audioinput"]);
+      },
+    });
   };
 
   const persistSession = async () => {
@@ -585,6 +871,10 @@ const MockInterview = () => {
               ) : (
                 <WebRTCRecorder
                   mode={recordMode}
+                  mouthTrackingEnabled={mouthTrackingEnabled}
+                  selectedAudioInputId={mediaSelection.audioInputId}
+                  selectedVideoInputId={mediaSelection.videoInputId}
+                  onPreferredDevicesUnavailable={handlePreferredDevicesUnavailable}
                   onStatusChange={(status) => {
                     console.log("Connection status:", status);
                     setConnectionStatus(status);
@@ -601,6 +891,59 @@ const MockInterview = () => {
               )}
 
               {/* AI Feedback */}
+              {recordMode !== "audio" && mouthTrackingEnabled && (
+                <div className="mt-6">
+                  <div className="theme-panel rounded-2xl p-6 backdrop-blur">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="theme-text-primary text-lg font-semibold">
+                          Live articulation
+                        </h2>
+                        <p className="theme-text-muted text-sm">
+                          Backend mouth tracking estimates whether lip and jaw movement are clear
+                          enough while you speak.
+                        </p>
+                      </div>
+                      <span className={`text-sm font-semibold ${liveArticulationTone}`}>
+                        {liveArticulationStatus}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="theme-panel-soft rounded-lg px-4 py-3">
+                        <p className="theme-text-dim text-xs uppercase tracking-wide">
+                          Mouth openness
+                        </p>
+                        <p className="theme-text-primary mt-1 text-xl font-semibold">
+                          {formatPercent(liveMouthOpenRatio)}
+                        </p>
+                      </div>
+                      <div className="theme-panel-soft rounded-lg px-4 py-3">
+                        <p className="theme-text-dim text-xs uppercase tracking-wide">
+                          Active articulation
+                        </p>
+                        <p className="theme-text-primary mt-1 text-xl font-semibold">
+                          {formatPercent(liveArticulationRate)}
+                        </p>
+                      </div>
+                      <div className="theme-panel-soft rounded-lg px-4 py-3">
+                        <p className="theme-text-dim text-xs uppercase tracking-wide">
+                          Movement change
+                        </p>
+                        <p className="theme-text-primary mt-1 text-xl font-semibold">
+                          {liveMouthMovement === null ? "N/A" : liveMouthMovement.toFixed(3)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="theme-text-muted mt-4 text-sm">
+                      This checks visible mouth opening, not exact phoneme accuracy. It works best
+                      when combined with the speech transcript feedback.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6">
                 <FeedbackPanel
                   speechFeedback={speechFeedback}
@@ -615,6 +958,7 @@ const MockInterview = () => {
               <QuestionGenerator
                 apiBase={API_BASE}
                 endpointPath={endpoints.questions}
+                sessionType={sessionType}
                 onQuestions={(questions) => {
                   setGeneratedQuestions(questions);
                   setQuestionAnswers([]);
@@ -644,6 +988,22 @@ const MockInterview = () => {
           onClose={() => setIsSettingsOpen(false)}
           recordMode={recordMode}
           setRecordMode={setRecordMode}
+          mouthTrackingEnabled={mouthTrackingEnabled}
+          onSetMouthTrackingEnabled={setMouthTrackingEnabled}
+          mediaDevices={mediaDevices}
+          mediaSelection={mediaSelection}
+          onSelectAudioInput={(audioInputId) =>
+            setMediaSelection((current) => ({ ...current, audioInputId }))
+          }
+          onSelectVideoInput={(videoInputId) =>
+            setMediaSelection((current) => ({ ...current, videoInputId }))
+          }
+          onRefreshMediaDevices={() => {
+            void refreshMediaDevices(!mediaDeviceLabelsAvailable);
+          }}
+          isRefreshingMediaDevices={isRefreshingMediaDevices}
+          mediaDeviceMessage={mediaDeviceMessage}
+          mediaDeviceLabelsAvailable={mediaDeviceLabelsAvailable}
           isSessionLocked={isSessionLocked}
           connectionStatus={connectionStatus}
           visionData={visionData}

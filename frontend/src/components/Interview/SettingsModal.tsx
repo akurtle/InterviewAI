@@ -1,11 +1,26 @@
 import ThemePicker from "../ThemePicker";
-import type { RecordMode, StartupMetrics } from "./types";
+import type {
+  MediaDeviceCatalog,
+  MediaDeviceSelection,
+  RecordMode,
+  StartupMetrics,
+} from "./types";
 
 type SettingsModalProps = {
   isOpen: boolean;
   onClose: () => void;
   recordMode: RecordMode;
   setRecordMode: (mode: RecordMode) => void;
+  mouthTrackingEnabled: boolean;
+  onSetMouthTrackingEnabled: (enabled: boolean) => void;
+  mediaDevices: MediaDeviceCatalog;
+  mediaSelection: MediaDeviceSelection;
+  onSelectAudioInput: (deviceId: string) => void;
+  onSelectVideoInput: (deviceId: string) => void;
+  onRefreshMediaDevices: () => void;
+  isRefreshingMediaDevices: boolean;
+  mediaDeviceMessage: string | null;
+  mediaDeviceLabelsAvailable: boolean;
   isSessionLocked: boolean;
   connectionStatus: string;
   visionData: any;
@@ -34,6 +49,16 @@ export default function SettingsModal({
   onClose,
   recordMode,
   setRecordMode,
+  mouthTrackingEnabled,
+  onSetMouthTrackingEnabled,
+  mediaDevices,
+  mediaSelection,
+  onSelectAudioInput,
+  onSelectVideoInput,
+  onRefreshMediaDevices,
+  isRefreshingMediaDevices,
+  mediaDeviceMessage,
+  mediaDeviceLabelsAvailable,
   isSessionLocked,
   connectionStatus,
   visionData,
@@ -112,6 +137,131 @@ export default function SettingsModal({
             <p className="mt-2 text-xs text-yellow-400">
               Stop the session to change recording mode
             </p>
+          )}
+        </div>
+
+        <div className="theme-panel-soft mb-6 rounded-lg p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="theme-text-primary text-sm font-semibold">
+                Mouth movement tracking
+              </p>
+              <p className="theme-text-muted mt-1 text-xs">
+                Uses backend face landmarks during video sessions to estimate visible
+                articulation and mouth opening.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={mouthTrackingEnabled}
+              onClick={() => onSetMouthTrackingEnabled(!mouthTrackingEnabled)}
+              disabled={isSessionLocked}
+              className={`relative inline-flex h-7 w-14 items-center rounded-full border transition ${
+                mouthTrackingEnabled
+                  ? "theme-choice-active"
+                  : "theme-button-secondary"
+              } ${isSessionLocked ? "cursor-not-allowed opacity-50" : ""}`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+                  mouthTrackingEnabled ? "translate-x-8" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          <p className="theme-text-muted mt-3 text-xs">
+            {mouthTrackingEnabled
+              ? "Enabled for new video sessions."
+              : "Disabled. Video sessions will skip backend mouth articulation analysis."}
+          </p>
+
+          {isSessionLocked && (
+            <p className="mt-2 text-xs text-yellow-400">
+              Stop the session to change mouth tracking
+            </p>
+          )}
+        </div>
+
+        <div className="theme-panel-soft mb-6 rounded-lg p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="theme-text-primary text-sm font-semibold">Input devices</p>
+              <p className="theme-text-muted mt-1 text-xs">
+                Bluetooth headsets and external webcams appear here after your operating system pairs
+                them.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onRefreshMediaDevices}
+              disabled={isRefreshingMediaDevices}
+              className={`theme-button-secondary rounded-lg px-3 py-2 text-xs ${
+                isRefreshingMediaDevices ? "cursor-wait opacity-70" : ""
+              }`}
+            >
+              {isRefreshingMediaDevices
+                ? "Refreshing..."
+                : mediaDeviceLabelsAvailable
+                  ? "Refresh devices"
+                  : "Allow device access"}
+            </button>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="theme-text-muted mb-2 block text-xs uppercase tracking-wide">
+                Microphone
+              </span>
+              <select
+                value={mediaSelection.audioInputId}
+                onChange={(event) => onSelectAudioInput(event.target.value)}
+                disabled={isSessionLocked}
+                className={`theme-panel theme-text-primary w-full rounded-lg border px-3 py-2 text-sm ${
+                  isSessionLocked ? "cursor-not-allowed opacity-60" : ""
+                }`}
+              >
+                <option value="">System default microphone</option>
+                {mediaDevices.audioInputs.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="theme-text-muted mb-2 block text-xs uppercase tracking-wide">
+                Camera
+              </span>
+              <select
+                value={mediaSelection.videoInputId}
+                onChange={(event) => onSelectVideoInput(event.target.value)}
+                disabled={isSessionLocked}
+                className={`theme-panel theme-text-primary w-full rounded-lg border px-3 py-2 text-sm ${
+                  isSessionLocked ? "cursor-not-allowed opacity-60" : ""
+                }`}
+              >
+                <option value="">System default camera</option>
+                {mediaDevices.videoInputs.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {isSessionLocked && (
+            <p className="mt-3 text-xs text-yellow-400">
+              Stop the session to switch microphones or cameras
+            </p>
+          )}
+
+          {mediaDeviceMessage && (
+            <p className="mt-3 text-xs text-yellow-300">{mediaDeviceMessage}</p>
           )}
         </div>
 

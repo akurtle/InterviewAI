@@ -26,6 +26,7 @@ class Offer(BaseModel):
     sdp: str
     type: str
     session_id: str | None = None
+    mouth_tracking_enabled: bool = True
 
 
 class CandidatePayload(BaseModel):
@@ -117,8 +118,15 @@ def schedule_disconnect_cleanup(session_id: str) -> None:
     session.cleanup_task = asyncio.create_task(delayed_cleanup())
 
 
-def register_peer_connection(session_id: str, pc: RTCPeerConnection) -> WebRTCSession:
-    session = WebRTCSession(peer_connection=pc)
+def register_peer_connection(
+    session_id: str,
+    pc: RTCPeerConnection,
+    mouth_tracking_enabled: bool = True,
+) -> WebRTCSession:
+    session = WebRTCSession(
+        peer_connection=pc,
+        mouth_tracking_enabled=mouth_tracking_enabled,
+    )
     sessions[session_id] = session
     pcs[session_id] = pc
 
@@ -206,7 +214,11 @@ async def webrtc_config():
 async def webrtc_offer(offer: Offer):
     session_id = offer.session_id or str(uuid.uuid4())
     pc = RTCPeerConnection()
-    register_peer_connection(session_id, pc)
+    register_peer_connection(
+        session_id,
+        pc,
+        mouth_tracking_enabled=offer.mouth_tracking_enabled,
+    )
 
     await pc.setRemoteDescription(
         RTCSessionDescription(sdp=offer.sdp, type=offer.type)

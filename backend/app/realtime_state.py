@@ -17,6 +17,7 @@ def utc_now() -> datetime:
 @dataclass
 class WebRTCSession:
     peer_connection: RTCPeerConnection
+    mouth_tracking_enabled: bool = True
     created_at: datetime = field(default_factory=utc_now)
     last_seen_at: datetime = field(default_factory=utc_now)
     results_socket_connected_at: datetime | None = None
