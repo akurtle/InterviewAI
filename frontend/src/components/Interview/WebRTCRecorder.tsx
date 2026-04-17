@@ -306,6 +306,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   onStartupMetric,
 }) => {
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const stageShellRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const resultsHeartbeatRef = useRef<number | null>(null);
@@ -331,6 +332,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [messages, setMessages] = useState<RecorderMessage[]>([]);
   const [connectionDetails, setConnectionDetails] = useState<{
     signaling: string;
@@ -346,6 +348,10 @@ const WebRTCRecorder: React.FC<Props> = ({
   const apiBase = getApiBase();
   const wsBase = getWsBase();
   const environment = CALL_ENVIRONMENT_PRESETS[callEnvironment];
+  const supportsFullscreen =
+    typeof document !== "undefined" &&
+    typeof document.fullscreenEnabled === "boolean" &&
+    document.fullscreenEnabled;
 
   const updateStatus = (newStatus: ConnectionStatus) => {
     setStatus(newStatus);
@@ -959,14 +965,47 @@ const WebRTCRecorder: React.FC<Props> = ({
   };
 
   useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === stageShellRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       void stopSession();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const toggleFullscreen = async () => {
+    if (!supportsFullscreen || !stageShellRef.current) {
+      return;
+    }
+
+    try {
+      if (document.fullscreenElement === stageShellRef.current) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      await stageShellRef.current.requestFullscreen();
+    } catch (fullscreenError) {
+      console.error("Failed to toggle fullscreen mode:", fullscreenError);
+    }
+  };
+
   return (
-    <div className="theme-stage overflow-hidden rounded-2xl backdrop-blur">
+    <div
+      ref={stageShellRef}
+      className={`theme-stage overflow-hidden backdrop-blur ${
+        isFullscreen ? "h-screen rounded-none" : "rounded-2xl"
+      }`}
+    >
       <div className="theme-border flex items-center justify-between border-b px-6 py-4">
         <div className="flex items-center gap-3">
           <span
@@ -991,6 +1030,17 @@ const WebRTCRecorder: React.FC<Props> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {supportsFullscreen && (
+            <button
+              type="button"
+              onClick={() => {
+                void toggleFullscreen();
+              }}
+              className="theme-button-secondary rounded-lg px-3 py-1.5 text-xs font-semibold"
+            >
+              {isFullscreen ? "Exit full screen" : "Full screen"}
+            </button>
+          )}
           <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${environment.accentClassName}`}>
             {environment.shortLabel}
           </span>

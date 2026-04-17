@@ -176,6 +176,7 @@ const MockInterview = () => {
   const [visionData, setVisionData] = useState<any>(null);
   const [visionFrames, setVisionFrames] = useState<VisionFrame[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
   const [questionAnswers, setQuestionAnswers] = useState<QuestionAnswerReview[]>([]);
   const [questionContext, setQuestionContext] = useState<SessionQuestionContext>({
@@ -199,6 +200,7 @@ const MockInterview = () => {
   const [callEnvironment, setCallEnvironment] = useState<CallEnvironmentId>(
     readStoredCallEnvironment
   );
+  const [isAudioPanelFullscreen, setIsAudioPanelFullscreen] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<{
     text: string;
     index: number;
@@ -207,6 +209,7 @@ const MockInterview = () => {
 
   const prevConnectionStatusRef = useRef(connectionStatus);
   const prevAudioRunningRef = useRef(false);
+  const audioPanelRef = useRef<HTMLDivElement | null>(null);
   const sessionStartedAtRef = useRef<number | null>(null);
   const persistedSessionKeyRef = useRef<string>("");
   const sessionRecordingRef = useRef<SessionRecording | null>(null);
@@ -216,6 +219,10 @@ const MockInterview = () => {
   const { endpoints, sessionType } = useSessionType();
   const { user, isConfigured: isSupabaseConfigured } = useAuth();
   const selectedEnvironment = CALL_ENVIRONMENT_PRESETS[callEnvironment];
+  const supportsFullscreen =
+    typeof document !== "undefined" &&
+    typeof document.fullscreenEnabled === "boolean" &&
+    document.fullscreenEnabled;
 
   const refreshMediaDevices = async (requestAccess = false) => {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -537,6 +544,17 @@ const MockInterview = () => {
   }, [callEnvironment]);
 
   useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsAudioPanelFullscreen(document.fullscreenElement === audioPanelRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!navigator.mediaDevices?.enumerateDevices) {
       setMediaDeviceMessage("This browser cannot list microphones or cameras yet.");
       return;
@@ -598,6 +616,23 @@ const MockInterview = () => {
         handlePreferredDevicesUnavailable(["audioinput"]);
       },
     });
+  };
+
+  const toggleAudioPanelFullscreen = async () => {
+    if (!supportsFullscreen || !audioPanelRef.current) {
+      return;
+    }
+
+    try {
+      if (document.fullscreenElement === audioPanelRef.current) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      await audioPanelRef.current.requestFullscreen();
+    } catch (fullscreenError) {
+      console.error("Failed to toggle audio panel fullscreen mode:", fullscreenError);
+    }
   };
 
   const persistSession = async () => {
@@ -783,18 +818,27 @@ const MockInterview = () => {
             </div>
           )}
           <div className="flex justify-end mb-6">
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              className="theme-button-secondary rounded-lg px-4 py-2 text-sm"
-            >
-              Open settings
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsInfoOpen(true)}
+                className="theme-button-secondary rounded-lg px-4 py-2 text-sm"
+              >
+                Info
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className="theme-button-secondary rounded-lg px-4 py-2 text-sm"
+              >
+                Open settings
+              </button>
+            </div>
           </div>
 
           <div className="mb-6">
             <div className="theme-panel rounded-2xl p-5 backdrop-blur">
-              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <span className="theme-chip rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]">
@@ -806,26 +850,18 @@ const MockInterview = () => {
                       UI only simulator
                     </span>
                   </div>
-                  <h1 className="theme-text-primary text-2xl font-semibold">
-                    Room simulator
-                  </h1>
-                  <p className="theme-text-muted mt-2 max-w-3xl text-sm">
-                    Change the session stage to feel like Teams, Google Meet, a live
-                    audience, or a more formal broadcast setup. This only changes the
-                    interface, not the recording or scoring flow.
-                  </p>
+                  <h1 className="theme-text-primary text-2xl font-semibold">Room simulator</h1>
                 </div>
 
-                <div className="theme-panel-soft rounded-2xl px-4 py-3">
-                  <p className="theme-text-dim text-xs uppercase tracking-[0.2em]">
-                    Current environment
-                  </p>
-                  <p className="theme-text-primary mt-1 text-base font-semibold">
+                <div className="flex items-center gap-2">
+                  <span className="theme-text-dim text-xs uppercase tracking-[0.2em]">
+                    Current
+                  </span>
+                  <span
+                    className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${selectedEnvironment.accentClassName}`}
+                  >
                     {selectedEnvironment.label}
-                  </p>
-                  <p className="theme-text-muted mt-1 text-sm">
-                    {selectedEnvironment.helperText}
-                  </p>
+                  </span>
                 </div>
               </div>
 
@@ -856,9 +892,6 @@ const MockInterview = () => {
                       <p className="theme-text-primary text-sm font-semibold">
                         {environment.label}
                       </p>
-                      <p className="theme-text-muted mt-2 text-xs leading-5">
-                        {environment.description}
-                      </p>
                     </button>
                   );
                 })}
@@ -869,12 +902,14 @@ const MockInterview = () => {
           <div className="mb-6">
             {user ? (
               <div className="theme-panel-soft rounded-2xl p-4">
-                <p className="theme-text-primary text-sm font-semibold">
-                  Signed in as {user.email}
-                </p>
-                <p className="theme-text-muted mt-1 text-sm">
-                  Completed sessions are saved automatically after feedback is generated.
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="theme-text-primary text-sm font-semibold">
+                    Signed in as {user.email}
+                  </p>
+                  <span className="theme-chip rounded-full border px-3 py-1 text-xs font-semibold">
+                    Auto-save on
+                  </span>
+                </div>
                 {sessionSaveMessage && (
                   <p
                     className={`mt-2 text-sm ${
@@ -891,10 +926,10 @@ const MockInterview = () => {
               </div>
             ) : (
               <div className="theme-panel-soft rounded-2xl p-4">
-                <p className="theme-text-primary text-sm font-semibold">Session saving is off</p>
-                <p className="theme-text-muted mt-1 text-sm">
-                  Sign in with Supabase auth to store per-user session history in Postgres.
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="theme-text-primary text-sm font-semibold">Session saving is off</p>
+                  <span className="theme-text-muted text-xs">Sign in to save history</span>
+                </div>
               </div>
             )}
           </div>
@@ -903,7 +938,12 @@ const MockInterview = () => {
             {/* WebRTC Recorder - Takes 2 columns in video mode, full width in audio mode */}
             <div className={recordMode === "audio" ? "" : "lg:col-span-2"}>
               {recordMode === "audio" ? (
-                <div className="theme-panel overflow-hidden rounded-2xl backdrop-blur">
+                <div
+                  ref={audioPanelRef}
+                  className={`theme-panel overflow-hidden backdrop-blur ${
+                    isAudioPanelFullscreen ? "h-screen rounded-none" : "rounded-2xl"
+                  }`}
+                >
                   <div className="theme-border flex items-center justify-between border-b px-6 py-4">
                     <div className="flex items-center gap-3">
                       <span className={`w-2.5 h-2.5 rounded-full ${audioStatusDot}`} />
@@ -913,6 +953,17 @@ const MockInterview = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {supportsFullscreen && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void toggleAudioPanelFullscreen();
+                          }}
+                          className="theme-button-secondary rounded-lg px-3 py-1.5 text-xs font-semibold"
+                        >
+                          {isAudioPanelFullscreen ? "Exit full screen" : "Full screen"}
+                        </button>
+                      )}
                       <span className="theme-chip rounded border px-2 py-1 text-xs">
                         Audio only
                       </span>
@@ -996,13 +1047,7 @@ const MockInterview = () => {
                   <div className="theme-panel rounded-2xl p-6 backdrop-blur">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h2 className="theme-text-primary text-lg font-semibold">
-                          Live articulation
-                        </h2>
-                        <p className="theme-text-muted text-sm">
-                          Backend mouth tracking estimates whether lip and jaw movement are clear
-                          enough while you speak.
-                        </p>
+                        <h2 className="theme-text-primary text-lg font-semibold">Live articulation</h2>
                       </div>
                       <span className={`text-sm font-semibold ${liveArticulationTone}`}>
                         {liveArticulationStatus}
@@ -1036,10 +1081,6 @@ const MockInterview = () => {
                       </div>
                     </div>
 
-                    <p className="theme-text-muted mt-4 text-sm">
-                      This checks visible mouth opening, not exact phoneme accuracy. It works best
-                      when combined with the speech transcript feedback.
-                    </p>
                   </div>
                 </div>
               )}
@@ -1111,6 +1152,86 @@ const MockInterview = () => {
           visionData={visionData}
           startupMetrics={startupMetrics}
         />
+        {isInfoOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div
+              className="absolute inset-0 bg-black/70"
+              onClick={() => setIsInfoOpen(false)}
+            />
+            <div className="theme-panel relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl p-6 backdrop-blur">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="theme-text-primary text-lg font-semibold">Session information</h2>
+                  <p className="theme-text-muted text-sm">
+                    Details moved here so the practice screen stays calmer.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsInfoOpen(false)}
+                  className="theme-button-secondary rounded-lg px-3 py-1.5 text-xs"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="theme-panel-soft rounded-2xl p-4">
+                  <p className="theme-text-primary text-sm font-semibold">Room simulator</p>
+                  <p className="theme-text-muted mt-2 text-sm">
+                    The environment switch changes the stage UI only. Your recording,
+                    transcription, feedback, and backend behavior stay the same.
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {CALL_ENVIRONMENT_OPTIONS.map((environment) => (
+                      <div key={environment.id} className="theme-panel rounded-xl px-3 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="theme-text-primary text-sm font-semibold">
+                            {environment.label}
+                          </p>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[11px] ${environment.accentClassName}`}
+                          >
+                            {environment.shortLabel}
+                          </span>
+                        </div>
+                        <p className="theme-text-muted mt-2 text-xs leading-5">
+                          {environment.helperText}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="theme-panel-soft rounded-2xl p-4">
+                  <p className="theme-text-primary text-sm font-semibold">What happens after a session</p>
+                  <p className="theme-text-muted mt-2 text-sm">
+                    Speech and video feedback are generated after you stop. If you are signed in,
+                    the completed session is also saved to your account.
+                  </p>
+                </div>
+
+                <div className="theme-panel-soft rounded-2xl p-4">
+                  <p className="theme-text-primary text-sm font-semibold">Live articulation</p>
+                  <p className="theme-text-muted mt-2 text-sm">
+                    Mouth tracking estimates visible articulation during video sessions. It helps
+                    with presence and clarity, but it does not score exact pronunciation.
+                  </p>
+                </div>
+
+                <div className="theme-panel-soft rounded-2xl p-4">
+                  <p className="theme-text-primary text-sm font-semibold">Quick practice tips</p>
+                  <ul className="theme-text-muted mt-2 space-y-2 text-sm">
+                    <li>Keep your face and shoulders visible.</li>
+                    <li>Pause briefly before key points.</li>
+                    <li>Use full examples instead of one-line answers.</li>
+                    <li>Choose audience view when you want public speaking pressure.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       <Footer />
