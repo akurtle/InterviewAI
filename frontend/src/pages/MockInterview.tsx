@@ -25,6 +25,7 @@ import { getApiBase, getWsBase } from "../network";
 import { saveInterviewSession, type SessionQuestionContext } from "../sessionStore";
 
 const MEDIA_SELECTION_STORAGE_KEY = "interview-ai:selected-media-devices";
+const MOUTH_TRACKING_STORAGE_KEY = "interview-ai:mouth-tracking-enabled";
 
 const parseTimestampSeconds = (value: unknown): number => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -105,6 +106,19 @@ const readStoredMediaSelection = (): MediaDeviceSelection => {
   }
 };
 
+const readStoredMouthTrackingEnabled = () => {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const raw = window.localStorage.getItem(MOUTH_TRACKING_STORAGE_KEY);
+  if (raw === null) {
+    return true;
+  }
+
+  return raw !== "false";
+};
+
 const buildDeviceLabel = (device: MediaDeviceInfo, index: number) => {
   const label = device.label.trim();
   if (label) {
@@ -160,6 +174,9 @@ const MockInterview = () => {
   const [startupMetrics, setStartupMetrics] = useState<StartupMetrics>(createEmptyStartupMetrics);
   const [mediaDevices, setMediaDevices] = useState<MediaDeviceCatalog>(createEmptyMediaDeviceCatalog);
   const [mediaSelection, setMediaSelection] = useState<MediaDeviceSelection>(readStoredMediaSelection);
+  const [mouthTrackingEnabled, setMouthTrackingEnabled] = useState<boolean>(
+    readStoredMouthTrackingEnabled
+  );
   const [isRefreshingMediaDevices, setIsRefreshingMediaDevices] = useState(false);
   const [mediaDeviceMessage, setMediaDeviceMessage] = useState<string | null>(null);
   const [mediaDeviceLabelsAvailable, setMediaDeviceLabelsAvailable] = useState(false);
@@ -413,9 +430,12 @@ const MockInterview = () => {
 
   const recentMouthFrames = visionFrames.filter(
     (frame) =>
-      typeof frame.mouth_open_ratio === "number" ||
-      typeof frame.mouth_movement_delta === "number" ||
-      typeof frame.articulation_active === "boolean"
+      mouthTrackingEnabled &&
+      (
+        typeof frame.mouth_open_ratio === "number" ||
+        typeof frame.mouth_movement_delta === "number" ||
+        typeof frame.articulation_active === "boolean"
+      )
   );
   const latestMouthFrame =
     recentMouthFrames.length > 0 ? recentMouthFrames[recentMouthFrames.length - 1] : null;
@@ -484,6 +504,13 @@ const MockInterview = () => {
     mediaSelectionRef.current = mediaSelection;
     window.localStorage.setItem(MEDIA_SELECTION_STORAGE_KEY, JSON.stringify(mediaSelection));
   }, [mediaSelection]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      MOUTH_TRACKING_STORAGE_KEY,
+      mouthTrackingEnabled ? "true" : "false"
+    );
+  }, [mouthTrackingEnabled]);
 
   useEffect(() => {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -844,6 +871,7 @@ const MockInterview = () => {
               ) : (
                 <WebRTCRecorder
                   mode={recordMode}
+                  mouthTrackingEnabled={mouthTrackingEnabled}
                   selectedAudioInputId={mediaSelection.audioInputId}
                   selectedVideoInputId={mediaSelection.videoInputId}
                   onPreferredDevicesUnavailable={handlePreferredDevicesUnavailable}
@@ -863,7 +891,7 @@ const MockInterview = () => {
               )}
 
               {/* AI Feedback */}
-              {recordMode !== "audio" && (
+              {recordMode !== "audio" && mouthTrackingEnabled && (
                 <div className="mt-6">
                   <div className="theme-panel rounded-2xl p-6 backdrop-blur">
                     <div className="flex items-center justify-between mb-4">
@@ -960,6 +988,8 @@ const MockInterview = () => {
           onClose={() => setIsSettingsOpen(false)}
           recordMode={recordMode}
           setRecordMode={setRecordMode}
+          mouthTrackingEnabled={mouthTrackingEnabled}
+          onSetMouthTrackingEnabled={setMouthTrackingEnabled}
           mediaDevices={mediaDevices}
           mediaSelection={mediaSelection}
           onSelectAudioInput={(audioInputId) =>

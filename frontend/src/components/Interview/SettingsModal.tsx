@@ -11,6 +11,8 @@ type SettingsModalProps = {
   onClose: () => void;
   recordMode: RecordMode;
   setRecordMode: (mode: RecordMode) => void;
+  mouthTrackingEnabled: boolean;
+  onSetMouthTrackingEnabled: (enabled: boolean) => void;
   mediaDevices: MediaDeviceCatalog;
   mediaSelection: MediaDeviceSelection;
   onSelectAudioInput: (deviceId: string) => void;
@@ -47,6 +49,8 @@ export default function SettingsModal({
   onClose,
   recordMode,
   setRecordMode,
+  mouthTrackingEnabled,
+  onSetMouthTrackingEnabled,
   mediaDevices,
   mediaSelection,
   onSelectAudioInput,
@@ -132,6 +136,51 @@ export default function SettingsModal({
           {isSessionLocked && (
             <p className="mt-2 text-xs text-yellow-400">
               Stop the session to change recording mode
+            </p>
+          )}
+        </div>
+
+        <div className="theme-panel-soft mb-6 rounded-lg p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="theme-text-primary text-sm font-semibold">
+                Mouth movement tracking
+              </p>
+              <p className="theme-text-muted mt-1 text-xs">
+                Uses backend face landmarks during video sessions to estimate visible
+                articulation and mouth opening.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={mouthTrackingEnabled}
+              onClick={() => onSetMouthTrackingEnabled(!mouthTrackingEnabled)}
+              disabled={isSessionLocked}
+              className={`relative inline-flex h-7 w-14 items-center rounded-full border transition ${
+                mouthTrackingEnabled
+                  ? "theme-choice-active"
+                  : "theme-button-secondary"
+              } ${isSessionLocked ? "cursor-not-allowed opacity-50" : ""}`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+                  mouthTrackingEnabled ? "translate-x-8" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          <p className="theme-text-muted mt-3 text-xs">
+            {mouthTrackingEnabled
+              ? "Enabled for new video sessions."
+              : "Disabled. Video sessions will skip backend mouth articulation analysis."}
+          </p>
+
+          {isSessionLocked && (
+            <p className="mt-2 text-xs text-yellow-400">
+              Stop the session to change mouth tracking
             </p>
           )}
         </div>

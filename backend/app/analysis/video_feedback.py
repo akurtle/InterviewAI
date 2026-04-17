@@ -171,11 +171,6 @@ def extract_video_features(
     articulation_active_rate = _mean(articulation_samples)
     avg_mouth_movement_delta = _mean(mouth_movement_deltas)
 
-    if not mouth_open_ratios:
-        warnings.append(
-            "No backend mouth landmarks were captured. Install MediaPipe to enable articulation tracking."
-        )
-
     features = {
         "face_presence_rate": face_presence_rate,
         "gaze_at_camera_rate": gaze_at_camera_rate,

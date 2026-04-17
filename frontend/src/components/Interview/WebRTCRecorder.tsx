@@ -58,6 +58,7 @@ type RecorderMessage = {
 
 type Props = {
   mode?: RecordMode;
+  mouthTrackingEnabled?: boolean;
   selectedAudioInputId?: string;
   selectedVideoInputId?: string;
   onPreferredDevicesUnavailable?: (kinds: Array<"audioinput" | "videoinput">) => void;
@@ -153,6 +154,7 @@ const waitForIceGatheringComplete = (pc: RTCPeerConnection, timeoutMs = 2500) =>
 
 const WebRTCRecorder: React.FC<Props> = ({
   mode = "both",
+  mouthTrackingEnabled = true,
   selectedAudioInputId,
   selectedVideoInputId,
   onPreferredDevicesUnavailable,
@@ -738,6 +740,7 @@ const WebRTCRecorder: React.FC<Props> = ({
           sdp: pc.localDescription?.sdp,
           type: pc.localDescription?.type,
           session_id: nextSessionId,
+          mouth_tracking_enabled: mouthTrackingEnabled,
         }),
       });
 

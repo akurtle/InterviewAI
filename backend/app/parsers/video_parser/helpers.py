@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable
 
 from fastapi import WebSocket
 
-from app.realtime_state import ws_clients
+from app.realtime_state import sessions, ws_clients
 
 try:
     import mediapipe as mp
@@ -144,6 +144,18 @@ async def run_video_pipeline(session_id: str, track):
         session_id,
         {"type": "vision_status", "source": "server", "message": "Video track connected."},
     )
+
+    session = sessions.get(session_id)
+    if session and not session.mouth_tracking_enabled:
+        await safe_send(
+            session_id,
+            {
+                "type": "vision_status",
+                "source": "server",
+                "message": "Backend mouth tracking is disabled for this session.",
+            },
+        )
+        return
 
     if mp is None:
         await safe_send(
