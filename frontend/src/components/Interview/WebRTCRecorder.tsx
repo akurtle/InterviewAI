@@ -5,6 +5,11 @@ import {
   getWsBase,
   openWebSocketWithLoopbackFallback,
 } from "../../network";
+import type { SessionType } from "../../hooks/useSessionType";
+import {
+  CALL_ENVIRONMENT_PRESETS,
+  type CallEnvironmentId,
+} from "./callEnvironments";
 import type { SessionRecording } from "./types";
 
 type RecordMode = "audio" | "video" | "both";
@@ -58,6 +63,8 @@ type RecorderMessage = {
 
 type Props = {
   mode?: RecordMode;
+  sessionType?: SessionType;
+  callEnvironment?: CallEnvironmentId;
   mouthTrackingEnabled?: boolean;
   selectedAudioInputId?: string;
   selectedVideoInputId?: string;
@@ -125,6 +132,137 @@ const buildMediaConstraints = ({
       : false,
 });
 
+const AUDIENCE_MEMBERS = [
+  "Hiring team",
+  "Product lead",
+  "Founder",
+  "Design panel",
+  "Investors",
+  "Audience",
+];
+
+const PARTICIPANT_STACK = ["You", "Interviewer", "Observer"];
+
+const renderAudienceScene = (
+  status: ConnectionStatus,
+  environmentLabel: string,
+  sessionType: SessionType
+) => (
+  <>
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(251,191,36,0.18),transparent_24%),radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.08),transparent_14%),radial-gradient(circle_at_75%_20%,rgba(255,255,255,0.08),transparent_14%)]" />
+    <div className="absolute inset-x-0 top-0 flex items-center justify-between px-6 py-5">
+      <div>
+        <p className="text-xs uppercase tracking-[0.28em] text-white/55">
+          {environmentLabel}
+        </p>
+        <p className="mt-1 text-sm font-semibold text-white/90">
+          {sessionType === "pitch" ? "Presentation in progress" : "Room attention on speaker"}
+        </p>
+      </div>
+      <div className="rounded-full border border-white/15 bg-white/8 px-3 py-1 text-xs font-medium text-white/70">
+        {status === "connected" ? "Audience view live" : "Audience view ready"}
+      </div>
+    </div>
+
+    <div className="absolute inset-x-6 top-20 grid grid-cols-3 gap-3 md:grid-cols-6">
+      {AUDIENCE_MEMBERS.map((member, index) => (
+        <div
+          key={member}
+          className="rounded-2xl border border-white/10 bg-white/6 px-3 py-4 text-center shadow-[0_18px_45px_rgba(0,0,0,0.22)] backdrop-blur-sm"
+        >
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white/90">
+            {index + 1}
+          </div>
+          <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.18em] text-white/55">
+            {member}
+          </p>
+        </div>
+      ))}
+    </div>
+
+    <div className="absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.18)_20%,rgba(6,6,10,0.92))]" />
+    <div className="absolute inset-x-0 bottom-0 h-24 bg-[radial-gradient(circle_at_50%_0%,rgba(251,191,36,0.2),transparent_36%),linear-gradient(180deg,rgba(69,39,14,0.65),rgba(17,10,6,0.92))]" />
+    <div className="absolute left-1/2 bottom-10 h-20 w-28 -translate-x-1/2 rounded-t-[40px] border border-white/10 bg-black/35 shadow-[0_30px_50px_rgba(0,0,0,0.35)]" />
+    <div className="absolute inset-x-6 bottom-5 flex items-center justify-between rounded-2xl border border-white/10 bg-black/35 px-4 py-3 backdrop-blur-sm">
+      <div>
+        <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+          Presenter prompt
+        </p>
+        <p className="mt-1 text-sm text-white/85">
+          {sessionType === "pitch"
+            ? "Keep eye-line forward and land the value proposition with confidence."
+            : "Answer as if the entire room is listening to your next point."}
+        </p>
+      </div>
+      <div className="hidden rounded-full border border-amber-200/20 bg-amber-200/12 px-3 py-1 text-xs font-semibold text-amber-100 md:block">
+        No self-view
+      </div>
+    </div>
+  </>
+);
+
+const renderPlatformScene = (
+  status: ConnectionStatus,
+  environmentLabel: string,
+  sessionType: SessionType,
+  controlClassName: string
+) => (
+  <>
+    <div className="absolute inset-x-0 top-0 flex items-center justify-between px-6 py-5">
+      <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-medium text-white/70 backdrop-blur-sm">
+        {environmentLabel}
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-medium text-white/70 backdrop-blur-sm">
+          {sessionType === "pitch" ? "Pitch rehearsal" : "Interview practice"}
+        </div>
+        <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-medium text-white/70 backdrop-blur-sm">
+          {status === "connected" ? "Live" : status === "connecting" ? "Joining..." : "Preview"}
+        </div>
+      </div>
+    </div>
+
+    <div className="absolute right-4 top-16 hidden w-36 space-y-2 lg:block">
+      {PARTICIPANT_STACK.map((participant) => (
+        <div
+          key={participant}
+          className="overflow-hidden rounded-2xl border border-white/10 bg-black/25 p-2 shadow-[0_18px_45px_rgba(0,0,0,0.2)] backdrop-blur-sm"
+        >
+          <div className="mb-2 h-16 rounded-xl bg-white/8" />
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60">
+            {participant}
+          </p>
+        </div>
+      ))}
+    </div>
+
+    <div className="absolute inset-x-6 bottom-6 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 backdrop-blur-md">
+      <div>
+        <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+          Practice cue
+        </p>
+        <p className="mt-1 text-sm text-white/85">
+          {sessionType === "pitch"
+            ? "Lead with the problem, then your solution, then measurable impact."
+            : "Pause, structure the answer, and let the room breathe between points."}
+        </p>
+      </div>
+
+      <div className="hidden items-center gap-2 md:flex">
+        <div className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-medium text-white/70">
+          Mic
+        </div>
+        <div className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-medium text-white/70">
+          Cam
+        </div>
+        <div className={`rounded-full px-3 py-1 text-xs font-semibold ${controlClassName}`}>
+          Present
+        </div>
+      </div>
+    </div>
+  </>
+);
+
 const waitForIceGatheringComplete = (pc: RTCPeerConnection, timeoutMs = 2500) =>
   new Promise<void>((resolve) => {
     if (pc.iceGatheringState === "complete") {
@@ -154,6 +292,8 @@ const waitForIceGatheringComplete = (pc: RTCPeerConnection, timeoutMs = 2500) =>
 
 const WebRTCRecorder: React.FC<Props> = ({
   mode = "both",
+  sessionType = "interview",
+  callEnvironment = "teams",
   mouthTrackingEnabled = true,
   selectedAudioInputId,
   selectedVideoInputId,
@@ -205,6 +345,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   });
   const apiBase = getApiBase();
   const wsBase = getWsBase();
+  const environment = CALL_ENVIRONMENT_PRESETS[callEnvironment];
 
   const updateStatus = (newStatus: ConnectionStatus) => {
     setStatus(newStatus);
@@ -850,6 +991,9 @@ const WebRTCRecorder: React.FC<Props> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${environment.accentClassName}`}>
+            {environment.shortLabel}
+          </span>
           <span className="theme-status-chip rounded border px-2 py-1 text-xs">
             {mode === "audio" && "Audio only"}
             {mode === "video" && "Video only"}
@@ -859,12 +1003,38 @@ const WebRTCRecorder: React.FC<Props> = ({
       </div>
 
       {(mode === "video" || mode === "both") && (
-        <div className="theme-stage-overlay relative aspect-video">
-          <video ref={videoRef} className="h-full w-full object-cover" playsInline muted />
-          {status === "idle" && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="theme-icon-badge mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl">
+        <div
+          className={`theme-stage-overlay relative aspect-video overflow-hidden ${environment.shellClassName}`}
+        >
+          <div className={`absolute inset-0 bg-gradient-to-br ${environment.frameClassName}`} />
+          <video
+            ref={videoRef}
+            className={
+              environment.stageLayout === "audience"
+                ? "pointer-events-none absolute h-px w-px opacity-0"
+                : "absolute inset-0 h-full w-full object-cover"
+            }
+            playsInline
+            muted
+          />
+
+          {environment.stageLayout === "audience"
+            ? renderAudienceScene(status, environment.label, sessionType)
+            : renderPlatformScene(
+                status,
+                environment.label,
+                sessionType,
+                environment.controlClassName
+              )}
+
+          {environment.stageLayout !== "audience" && (
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.12),transparent_22%,transparent_68%,rgba(0,0,0,0.32))]" />
+          )}
+
+          {(status === "idle" || status === "error") && (
+            <div className="absolute inset-0 flex items-center justify-center px-6">
+              <div className="max-w-md rounded-3xl border border-white/12 bg-black/35 px-6 py-5 text-center shadow-[0_28px_65px_rgba(0,0,0,0.35)] backdrop-blur-md">
+                <div className="theme-icon-badge mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl">
                   <svg
                     className="theme-accent-text h-8 w-8"
                     fill="none"
@@ -879,8 +1049,15 @@ const WebRTCRecorder: React.FC<Props> = ({
                     />
                   </svg>
                 </div>
-                <p className="theme-text-primary font-semibold">Start session to begin</p>
+                <p className="text-lg font-semibold text-white">{environment.idleTitle}</p>
+                <p className="mt-2 text-sm text-white/70">{environment.idleBody}</p>
               </div>
+            </div>
+          )}
+
+          {status === "connecting" && (
+            <div className="absolute left-6 bottom-24 rounded-full border border-white/15 bg-black/35 px-3 py-1 text-xs font-semibold text-white/75 backdrop-blur-sm">
+              Building the simulated room...
             </div>
           )}
         </div>
@@ -907,6 +1084,9 @@ const WebRTCRecorder: React.FC<Props> = ({
             <p className="theme-text-primary text-lg font-semibold">Audio Recording Mode</p>
             <p className="theme-text-muted mt-2 text-sm">
               {status === "connected" ? "Recording your voice..." : "Ready to start"}
+            </p>
+            <p className="theme-text-dim mt-3 text-xs">
+              Visual simulator selected: {environment.label}
             </p>
           </div>
         </div>
