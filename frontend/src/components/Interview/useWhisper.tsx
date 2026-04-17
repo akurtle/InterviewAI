@@ -9,7 +9,22 @@ interface WhisperCallbacks {
   onStartupMetric?: (metric: "asr_socket_ready_ms" | "asr_recording_ready_ms") => void;
 }
 
+type WhisperStartOptions = {
+  audioDeviceId?: string;
+  onPreferredDeviceUnavailable?: () => void;
+};
+
 const AUDIO_RECONNECT_DELAYS_MS = [1000, 2000, 5000];
+const isRecoverableDeviceSelectionError = (error: unknown) =>
+  error instanceof DOMException &&
+  (error.name === "NotFoundError" || error.name === "OverconstrainedError");
+
+const buildAudioConstraints = (audioDeviceId?: string, usePreferredDeviceId = true): MediaStreamConstraints => ({
+  audio:
+    audioDeviceId && usePreferredDeviceId
+      ? { deviceId: { exact: audioDeviceId } }
+      : true,
+});
 
 export function useWhisperWS(
   wsUrl = `${getWsBase()}/asr`,
@@ -76,15 +91,31 @@ export function useWhisperWS(
     wsRef.current = null;
   };
 
-  const start = async (providedStream?: MediaStream) => {
+  const start = async (providedStream?: MediaStream, options?: WhisperStartOptions) => {
     try {
       clearReconnectTimer();
       updateStatus("connecting");
 
       shouldReconnectRef.current = true;
-      const stream = providedStream
-        ? new MediaStream(providedStream.getAudioTracks())
-        : await navigator.mediaDevices.getUserMedia({ audio: true });
+      let stream: MediaStream;
+      if (providedStream) {
+        stream = new MediaStream(providedStream.getAudioTracks());
+      } else {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(
+            buildAudioConstraints(options?.audioDeviceId, true)
+          );
+        } catch (error) {
+          if (!options?.audioDeviceId || !isRecoverableDeviceSelectionError(error)) {
+            throw error;
+          }
+
+          stream = await navigator.mediaDevices.getUserMedia(
+            buildAudioConstraints(options.audioDeviceId, false)
+          );
+          options.onPreferredDeviceUnavailable?.();
+        }
+      }
 
       ownsStreamRef.current = !providedStream;
       streamRef.current = stream;
@@ -125,7 +156,7 @@ export function useWhisperWS(
         reconnectAttemptsRef.current += 1;
         cleanupTransport(false);
         reconnectTimerRef.current = window.setTimeout(() => {
-          void start(streamRef.current ?? undefined);
+          void start(streamRef.current ?? undefined, options);
         }, delay);
       };
 

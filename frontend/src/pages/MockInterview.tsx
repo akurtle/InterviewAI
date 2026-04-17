@@ -447,13 +447,37 @@ const MockInterview = () => {
     }
   };
 
+  const handlePreferredDevicesUnavailable = (kinds: Array<"audioinput" | "videoinput">) => {
+    setMediaSelection((current) => ({
+      audioInputId: kinds.includes("audioinput") ? "" : current.audioInputId,
+      videoInputId: kinds.includes("videoinput") ? "" : current.videoInputId,
+    }));
+
+    if (kinds.length === 2) {
+      setMediaDeviceMessage(
+        "Your selected external microphone and camera were unavailable, so the app switched back to the system defaults."
+      );
+      return;
+    }
+
+    const label = kinds[0] === "audioinput" ? "microphone" : "camera";
+    setMediaDeviceMessage(
+      `Your selected external ${label} was unavailable, so the app switched back to the system default.`
+    );
+  };
+
   const handleAudioToggle = async () => {
     if (isAudioRunning) {
       stopAudio();
       return;
     }
     beginSession();
-    await startAudio();
+    await startAudio(undefined, {
+      audioDeviceId: mediaSelection.audioInputId,
+      onPreferredDeviceUnavailable: () => {
+        handlePreferredDevicesUnavailable(["audioinput"]);
+      },
+    });
   };
 
   const persistSession = async () => {
@@ -753,6 +777,7 @@ const MockInterview = () => {
                   mode={recordMode}
                   selectedAudioInputId={mediaSelection.audioInputId}
                   selectedVideoInputId={mediaSelection.videoInputId}
+                  onPreferredDevicesUnavailable={handlePreferredDevicesUnavailable}
                   onStatusChange={(status) => {
                     console.log("Connection status:", status);
                     setConnectionStatus(status);
