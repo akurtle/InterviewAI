@@ -50,6 +50,19 @@ const formatLabel = (value: string) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
+const getContextFieldLabels = (sessionType: "interview" | "pitch") =>
+  sessionType === "pitch"
+    ? {
+        role: "Pitch Topic",
+        company: "Audience / Company",
+        callType: "Pitch Format",
+      }
+    : {
+        role: "Role",
+        company: "Company",
+        callType: "Interview Format",
+      };
+
 const formatDuration = (startedAt: string, endedAt: string) => {
   const durationMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
   if (!Number.isFinite(durationMs) || durationMs <= 0) {
@@ -457,6 +470,9 @@ export default function Account() {
   const transcriptReview = selectedSession
     ? buildQuestionAnswerSections(selectedSession, selectedSessionAnswers)
     : null;
+  const selectedContextLabels = selectedSession
+    ? getContextFieldLabels(selectedSession.session_type)
+    : null;
 
   return (
     <div className="theme-page-shell">
@@ -632,13 +648,13 @@ export default function Account() {
 
                     <div className="mt-6 grid gap-3 md:grid-cols-3">
                       <div className="theme-panel-soft rounded-2xl p-4">
-                        <p className="theme-text-dim text-xs uppercase tracking-wide">Company</p>
+                        <p className="theme-text-dim text-xs uppercase tracking-wide">{selectedContextLabels?.company}</p>
                         <p className="theme-text-primary mt-2 text-lg font-semibold">
                           {selectedSession.question_context?.company || "N/A"}
                         </p>
                       </div>
                       <div className="theme-panel-soft rounded-2xl p-4">
-                        <p className="theme-text-dim text-xs uppercase tracking-wide">Call Type</p>
+                        <p className="theme-text-dim text-xs uppercase tracking-wide">{selectedContextLabels?.callType}</p>
                         <p className="theme-text-primary mt-2 text-lg font-semibold">
                           {selectedSession.question_context?.callType || "N/A"}
                         </p>

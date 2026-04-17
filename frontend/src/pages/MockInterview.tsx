@@ -808,6 +808,7 @@ const MockInterview = () => {
               <QuestionGenerator
                 apiBase={API_BASE}
                 endpointPath={endpoints.questions}
+                sessionType={sessionType}
                 onQuestions={(questions) => {
                   setGeneratedQuestions(questions);
                   setQuestionAnswers([]);
