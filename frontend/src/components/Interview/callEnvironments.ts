@@ -38,8 +38,8 @@ export const CALL_ENVIRONMENT_PRESETS: Record<
     idleTitle: "Enter the Teams-style room",
     idleBody: "Start the session to practice with a familiar company meeting frame.",
     accentClassName: "bg-[#5b5fc7]/20 text-[#d8dcff] border-[#7f85ff]/35",
-    shellClassName: "border-white/10 bg-[#111827]/85",
-    frameClassName: "from-[#0f172a] via-[#111827] to-[#1e293b]",
+    shellClassName: "border-white/10 bg-[#3b3a39]",
+    frameClassName: "from-[#3b3a39] via-[#3b3a39] to-[#2f2f2f]",
     controlClassName: "bg-[#5b5fc7] text-white",
   },
   meet: {
@@ -54,8 +54,8 @@ export const CALL_ENVIRONMENT_PRESETS: Record<
     idleTitle: "Open the Meet-style room",
     idleBody: "Start the session to rehearse in a cleaner browser meeting layout.",
     accentClassName: "bg-[#0f9d58]/20 text-[#d6ffe8] border-[#34d399]/35",
-    shellClassName: "border-white/10 bg-[#0f141a]/88",
-    frameClassName: "from-[#101828] via-[#1f2937] to-[#111827]",
+    shellClassName: "border-white/10 bg-[#3a3a3a]",
+    frameClassName: "from-[#3a3a3a] via-[#373737] to-[#303030]",
     controlClassName: "bg-white text-slate-900",
   },
   audience: {
