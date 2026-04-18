@@ -11,9 +11,16 @@ import {
   type CallEnvironmentId,
 } from "./callEnvironments";
 import type { SessionRecording } from "./types";
+import {
+  formatCallClock,
+  renderAudienceScene,
+  renderMeetScene,
+  renderPlatformScene,
+  renderTeamsScene,
+  type ConnectionStatus,
+} from "./WebRTCRecorderSceneHelpers";
 
 type RecordMode = "audio" | "video" | "both";
-type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
 
 type DetectedFace = {
   boundingBox?: {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { useAuth } from "../auth";
+import { useAuth } from "../../auth";
 
 type MenuItem = {
   label: string;

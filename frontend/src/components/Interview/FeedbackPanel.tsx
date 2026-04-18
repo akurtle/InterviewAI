@@ -20,49 +20,6 @@ const feedbackBadgeClass = (status: FeedbackStatus) =>
 const feedbackBadgeLabel = (status: FeedbackStatus) =>
   status === "ready" ? "Ready" : status === "loading" ? "Loading" : status === "error" ? "Error" : "Idle";
 
-const speechMetricLabels: Array<{ key: string; label: string }> = [
-  { key: "total_words", label: "Total words" },
-  { key: "filler_count", label: "Filler count" },
-  { key: "filler_rate", label: "Filler rate" },
-  { key: "unique_word_ratio", label: "Unique word ratio" },
-  { key: "avg_sentence_length", label: "Avg sentence length" },
-  { key: "sentence_length_std", label: "Sentence length std" },
-  { key: "repetition_rate", label: "Repetition rate" },
-  { key: "pause_count", label: "Pause count" },
-  { key: "avg_pause_seconds", label: "Avg pause (s)" },
-  { key: "long_pause_ratio", label: "Long pause ratio" },
-  { key: "pause_rate_per_min", label: "Pause rate/min" },
-  { key: "speaking_rate_wpm", label: "Speaking rate (wpm)" },
-  { key: "total_duration_seconds", label: "Total duration (s)" },
-  { key: "talking_time_seconds", label: "Talking time (s)" },
-];
-
-const formatSpeechMetric = (key: string, value: any) => {
-  if (value === null || value === undefined) return "N/A";
-  const num = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(num)) return String(value);
-
-  if (["filler_rate", "unique_word_ratio", "repetition_rate", "long_pause_ratio"].includes(key)) {
-    return `${(num * 100).toFixed(1)}%`;
-  }
-
-  if (
-    [
-      "avg_sentence_length",
-      "sentence_length_std",
-      "avg_pause_seconds",
-      "pause_rate_per_min",
-      "speaking_rate_wpm",
-      "total_duration_seconds",
-      "talking_time_seconds",
-    ].includes(key)
-  ) {
-    return num.toFixed(1);
-  }
-
-  return Math.round(num).toString();
-};
-
 const videoMetricLabels: Array<{ key: string; label: string }> = [
   { key: "frame_count", label: "Frames analyzed" },
   { key: "mouth_frame_count", label: "Mouth frames" },
@@ -191,7 +148,7 @@ export default function FeedbackPanel({
                 </div>
               )}
 
-              {speechMetrics && (
+              {/* {speechMetrics && (
                 <div className="space-y-2">
                   <p className="theme-text-dim text-xs uppercase tracking-wide">Metrics</p>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -208,7 +165,7 @@ export default function FeedbackPanel({
                     ))}
                   </div>
                 </div>
-              )}
+              )} */}
 
               {speechWarnings.length > 0 && (
                 <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">

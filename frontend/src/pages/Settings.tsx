@@ -1,6 +1,6 @@
-import Footer from "../components/Footer";
-import Navbar from "../components/Navbar";
-import ThemePicker from "../components/ThemePicker";
+import Footer from "../components/Layout/Footer";
+import Navbar from "../components/Layout/Navbar";
+import ThemePicker from "../components/Settings/ThemePicker";
 
 export default function Settings() {
   return (

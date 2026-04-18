@@ -1,7 +1,7 @@
-import Navbar from '../components/Navbar';
-import Hero from '../components/Hero';
-import Features from '../components/Features';
-import Footer from '../components/Footer';
+import Navbar from '../components/Layout/Navbar';
+import Hero from '../components/Marketing/Hero';
+import Features from '../components/Marketing/Features';
+import Footer from '../components/Layout/Footer';
 
 function Home() {
   return (<div className="theme-page-shell">

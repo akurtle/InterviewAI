@@ -139,10 +139,6 @@ export default function QuestionGenerator({
   const companyPlaceholder =
     sessionType === "pitch" ? "Hiring leaders at growth-stage startups" : "Acme Inc.";
   const generatorTitle = sessionType === "pitch" ? "Pitch Generator" : "Question Generator";
-  const generatorSubtitle =
-    sessionType === "pitch"
-      ? "Build a tailored practice session that generates one prompt at a time."
-      : "Build a tailored practice session that generates one question at a time.";
   const isBusy = isGenerating || isFetchingNextQuestion;
   const inputsLocked = questions.length > 0 || isBusy || interviewStatus !== "idle";
   const canRequestAnotherQuestion =

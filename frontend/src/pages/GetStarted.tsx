@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
-import ResumeButton from '../components/parsers/ResumeButton';
-import InterviewButton from '../components/parsers/InterviewButton';
-import Upload from '../components/parsers/Upload';
-import Analysis from '../components/parsers/Analysis';
-import FeaturesMiniSection from '../components/parsers/FeaturesMiniSection';
+import Navbar from '../components/Layout/Navbar';
+import Footer from '../components/Layout/Footer';
+import ResumeButton from '../components/Resume/ResumeButton';
+import InterviewButton from '../components/Resume/InterviewButton';
+import Upload from '../components/Resume/Upload';
+import Analysis from '../components/Resume/Analysis';
+import FeaturesMiniSection from '../components/Resume/FeaturesMiniSection';
 import { fetchWithLoopbackFallback, getApiBase } from '../network';
 
 export type StepType = 'choose' | 'upload' | 'analyze';

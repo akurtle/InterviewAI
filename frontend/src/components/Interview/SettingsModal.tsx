@@ -1,4 +1,4 @@
-import ThemePicker from "../ThemePicker";
+import ThemePicker from "../Settings/ThemePicker";
 import {
   CALL_ENVIRONMENT_OPTIONS,
   type CallEnvironmentId,
