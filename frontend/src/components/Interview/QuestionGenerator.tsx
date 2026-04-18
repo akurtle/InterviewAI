@@ -522,7 +522,6 @@ export default function QuestionGenerator({
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="theme-text-primary text-lg font-semibold">{generatorTitle}</h2>
-          <p className="theme-text-muted text-xs">{generatorSubtitle}</p>
         </div>
       </div>
 
@@ -532,11 +531,6 @@ export default function QuestionGenerator({
             <div>
               <p className="theme-text-primary text-sm font-semibold">
                 {sessionType === "pitch" ? "Pitch Brief" : "Interview Brief"}
-              </p>
-              <p className="theme-text-muted mt-1 text-xs">
-                {sessionType === "pitch"
-                  ? "This section now adapts to the pitch format selected at the start."
-                  : "This section now adapts to the interview format selected at the start."}
               </p>
             </div>
             <span className="theme-chip rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
@@ -558,7 +552,6 @@ export default function QuestionGenerator({
                   } ${inputsLocked ? "cursor-not-allowed opacity-60" : ""}`}
                 >
                   <p className="theme-text-primary text-sm font-semibold">{preset.label}</p>
-                  <p className="theme-text-muted mt-1 text-xs">{preset.description}</p>
                 </button>
               );
             })}
@@ -594,7 +587,6 @@ export default function QuestionGenerator({
         <div className="theme-panel-soft rounded-2xl p-4">
           <p className="theme-text-dim text-xs uppercase tracking-wide">Selected format</p>
           <p className="theme-text-primary mt-2 text-sm font-semibold">{currentPreset?.label}</p>
-          <p className="theme-text-muted mt-1 text-xs">{currentPreset?.description}</p>
         </div>
       </div>
 

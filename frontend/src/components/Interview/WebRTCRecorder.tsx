@@ -5,6 +5,11 @@ import {
   getWsBase,
   openWebSocketWithLoopbackFallback,
 } from "../../network";
+import type { SessionType } from "../../hooks/useSessionType";
+import {
+  CALL_ENVIRONMENT_PRESETS,
+  type CallEnvironmentId,
+} from "./callEnvironments";
 import type { SessionRecording } from "./types";
 
 type RecordMode = "audio" | "video" | "both";
@@ -64,6 +69,8 @@ type RecorderMessage = {
 
 type Props = {
   mode?: RecordMode;
+  sessionType?: SessionType;
+  callEnvironment?: CallEnvironmentId;
   mouthTrackingEnabled?: boolean;
   selectedAudioInputId?: string;
   selectedVideoInputId?: string;
@@ -161,6 +168,8 @@ const observeIceGatheringComplete = (
 
 const WebRTCRecorder: React.FC<Props> = ({
   mode = "both",
+  sessionType = "interview",
+  callEnvironment = "teams",
   mouthTrackingEnabled = true,
   selectedAudioInputId,
   selectedVideoInputId,
@@ -173,6 +182,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   onStartupMetric,
 }) => {
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const stageShellRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const resultsHeartbeatRef = useRef<number | null>(null);
@@ -197,10 +207,13 @@ const WebRTCRecorder: React.FC<Props> = ({
   const recordingStopPromiseRef = useRef<Promise<void> | null>(null);
   const recordingStopResolverRef = useRef<(() => void) | null>(null);
   const isStoppingRef = useRef(false);
+  const clockStartedAtRef = useRef<number | null>(null);
 
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [messages, setMessages] = useState<RecorderMessage[]>([]);
   const [connectionDetails, setConnectionDetails] = useState<{
     signaling: string;
@@ -215,6 +228,12 @@ const WebRTCRecorder: React.FC<Props> = ({
   });
   const apiBase = getApiBase();
   const wsBase = getWsBase();
+  const environment = CALL_ENVIRONMENT_PRESETS[callEnvironment];
+  const elapsedLabel = formatCallClock(elapsedMs);
+  const supportsFullscreen =
+    typeof document !== "undefined" &&
+    typeof document.fullscreenEnabled === "boolean" &&
+    document.fullscreenEnabled;
 
   const updateStatus = (newStatus: ConnectionStatus) => {
     setStatus(newStatus);
@@ -922,14 +941,67 @@ const WebRTCRecorder: React.FC<Props> = ({
   };
 
   useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === stageShellRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (status === "connecting" || status === "connected") {
+      if (clockStartedAtRef.current === null) {
+        clockStartedAtRef.current = Date.now();
+        setElapsedMs(0);
+      }
+
+      const timer = window.setInterval(() => {
+        setElapsedMs(Date.now() - (clockStartedAtRef.current ?? Date.now()));
+      }, 1000);
+
+      return () => {
+        window.clearInterval(timer);
+      };
+    }
+
+    clockStartedAtRef.current = null;
+    setElapsedMs(0);
+  }, [status]);
+
+  useEffect(() => {
     return () => {
       void stopSession();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const toggleFullscreen = async () => {
+    if (!supportsFullscreen || !stageShellRef.current) {
+      return;
+    }
+
+    try {
+      if (document.fullscreenElement === stageShellRef.current) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      await stageShellRef.current.requestFullscreen();
+    } catch (fullscreenError) {
+      console.error("Failed to toggle fullscreen mode:", fullscreenError);
+    }
+  };
+
   return (
-    <div className="theme-stage overflow-hidden rounded-2xl backdrop-blur">
+    <div
+      ref={stageShellRef}
+      className={`theme-stage overflow-hidden backdrop-blur ${
+        isFullscreen ? "h-screen rounded-none" : "rounded-2xl"
+      }`}
+    >
       <div className="theme-border flex items-center justify-between border-b px-6 py-4">
         <div className="flex items-center gap-3">
           <span
@@ -954,6 +1026,20 @@ const WebRTCRecorder: React.FC<Props> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {supportsFullscreen && (
+            <button
+              type="button"
+              onClick={() => {
+                void toggleFullscreen();
+              }}
+              className="theme-button-secondary rounded-lg px-3 py-1.5 text-xs font-semibold"
+            >
+              {isFullscreen ? "Exit full screen" : "Full screen"}
+            </button>
+          )}
+          <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${environment.accentClassName}`}>
+            {environment.shortLabel}
+          </span>
           <span className="theme-status-chip rounded border px-2 py-1 text-xs">
             {mode === "audio" && "Audio only"}
             {mode === "video" && "Video only"}
@@ -963,29 +1049,83 @@ const WebRTCRecorder: React.FC<Props> = ({
       </div>
 
       {(mode === "video" || mode === "both") && (
-        <div className="theme-stage-overlay relative aspect-video">
-          <video ref={videoRef} className="h-full w-full object-cover" playsInline muted />
-          {status === "idle" && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="theme-icon-badge mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl">
-                  <svg
-                    className="theme-accent-text h-8 w-8"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
+        <div
+          className={`theme-stage-overlay relative aspect-video overflow-hidden ${environment.shellClassName}`}
+        >
+          <div className={`absolute inset-0 bg-gradient-to-br ${environment.frameClassName}`} />
+          {callEnvironment === "teams" ? (
+            renderTeamsScene({
+              status,
+              elapsedLabel,
+              videoRef,
+              onLeave: () => {
+                void stopSession();
+              },
+            })
+          ) : callEnvironment === "meet" ? (
+            renderMeetScene({
+              status,
+              videoRef,
+              onLeave: () => {
+                void stopSession();
+              },
+            })
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                className={
+                  environment.stageLayout === "audience"
+                    ? "pointer-events-none absolute h-px w-px opacity-0"
+                    : "absolute inset-0 h-full w-full object-cover"
+                }
+                playsInline
+                muted
+              />
+
+              {environment.stageLayout === "audience"
+                ? renderAudienceScene(status, environment.label, sessionType)
+                : renderPlatformScene(
+                    status,
+                    environment.label,
+                    sessionType,
+                    environment.controlClassName
+                  )}
+
+              {environment.stageLayout !== "audience" && (
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.12),transparent_22%,transparent_68%,rgba(0,0,0,0.32))]" />
+              )}
+
+              {(status === "idle" || status === "error") && (
+                <div className="absolute inset-0 flex items-center justify-center px-6">
+                  <div className="max-w-md rounded-3xl border border-white/12 bg-black/35 px-6 py-5 text-center shadow-[0_28px_65px_rgba(0,0,0,0.35)] backdrop-blur-md">
+                    <div className="theme-icon-badge mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl">
+                      <svg
+                        className="theme-accent-text h-8 w-8"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                    </div>
+                    <p className="text-lg font-semibold text-white">{environment.idleTitle}</p>
+                    <p className="mt-2 text-sm text-white/70">{environment.idleBody}</p>
+                  </div>
                 </div>
-                <p className="theme-text-primary font-semibold">Start session to begin</p>
-              </div>
-            </div>
+              )}
+
+              {status === "connecting" && (
+                <div className="absolute left-6 bottom-24 rounded-full border border-white/15 bg-black/35 px-3 py-1 text-xs font-semibold text-white/75 backdrop-blur-sm">
+                  Building the simulated room...
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1011,6 +1151,9 @@ const WebRTCRecorder: React.FC<Props> = ({
             <p className="theme-text-primary text-lg font-semibold">Audio Recording Mode</p>
             <p className="theme-text-muted mt-2 text-sm">
               {status === "connected" ? "Recording your voice..." : "Ready to start"}
+            </p>
+            <p className="theme-text-dim mt-3 text-xs">
+              Visual simulator selected: {environment.label}
             </p>
           </div>
         </div>
