@@ -130,10 +130,6 @@ export default function QuestionGenerator({
   const companyPlaceholder =
     sessionType === "pitch" ? "Hiring leaders at growth-stage startups" : "Acme Inc.";
   const generatorTitle = sessionType === "pitch" ? "Pitch Generator" : "Question Generator";
-  const generatorSubtitle =
-    sessionType === "pitch"
-      ? "Build a tailored practice set for the kind of pitch you chose at the start."
-      : "Build a tailored practice set for the interview format you chose at the start.";
 
   const normalizeItem = (item: string | GeneratedQuestion): GeneratedQuestion | null => {
     if (typeof item === "string") {
@@ -444,7 +440,6 @@ export default function QuestionGenerator({
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="theme-text-primary text-lg font-semibold">{generatorTitle}</h2>
-          <p className="theme-text-muted text-xs">{generatorSubtitle}</p>
         </div>
       </div>
 
@@ -454,11 +449,6 @@ export default function QuestionGenerator({
             <div>
               <p className="theme-text-primary text-sm font-semibold">
                 {sessionType === "pitch" ? "Pitch Brief" : "Interview Brief"}
-              </p>
-              <p className="theme-text-muted mt-1 text-xs">
-                {sessionType === "pitch"
-                  ? "This section now adapts to the pitch format selected at the start."
-                  : "This section now adapts to the interview format selected at the start."}
               </p>
             </div>
             <span className="theme-chip rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
@@ -479,7 +469,6 @@ export default function QuestionGenerator({
                   }`}
                 >
                   <p className="theme-text-primary text-sm font-semibold">{preset.label}</p>
-                  <p className="theme-text-muted mt-1 text-xs">{preset.description}</p>
                 </button>
               );
             })}
@@ -513,7 +502,6 @@ export default function QuestionGenerator({
         <div className="theme-panel-soft rounded-2xl p-4">
           <p className="theme-text-dim text-xs uppercase tracking-wide">Selected format</p>
           <p className="theme-text-primary mt-2 text-sm font-semibold">{currentPreset?.label}</p>
-          <p className="theme-text-muted mt-1 text-xs">{currentPreset?.description}</p>
         </div>
       </div>
 
@@ -715,8 +703,8 @@ export default function QuestionGenerator({
         ) : (
           <p className="theme-text-dim text-sm">
             {sessionType === "pitch"
-              ? "Choose your pitch format, add the topic and audience, and generate a tailored prompt set."
-              : "Choose your interview format, add the role and company, and generate a tailored question set."}
+              ? "Add the topic and audience, then generate prompts."
+              : "Add the role and company, then generate questions."}
           </p>
         )}
       </div>

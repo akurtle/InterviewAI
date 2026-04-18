@@ -1,4 +1,8 @@
 import ThemePicker from "../ThemePicker";
+import {
+  CALL_ENVIRONMENT_OPTIONS,
+  type CallEnvironmentId,
+} from "./callEnvironments";
 import type {
   MediaDeviceCatalog,
   MediaDeviceSelection,
@@ -10,6 +14,8 @@ type SettingsModalProps = {
   isOpen: boolean;
   onClose: () => void;
   recordMode: RecordMode;
+  callEnvironment: CallEnvironmentId;
+  onSetCallEnvironment: (environment: CallEnvironmentId) => void;
   setRecordMode: (mode: RecordMode) => void;
   mouthTrackingEnabled: boolean;
   onSetMouthTrackingEnabled: (enabled: boolean) => void;
@@ -48,6 +54,8 @@ export default function SettingsModal({
   isOpen,
   onClose,
   recordMode,
+  callEnvironment,
+  onSetCallEnvironment,
   setRecordMode,
   mouthTrackingEnabled,
   onSetMouthTrackingEnabled,
@@ -86,6 +94,36 @@ export default function SettingsModal({
             title="Appearance"
             description="Switch themes without leaving the interview flow. The selection applies across the whole app."
           />
+        </div>
+
+        <div className="mb-6">
+          <p className="theme-text-muted mb-2 text-sm">Call environment</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {CALL_ENVIRONMENT_OPTIONS.map((environment) => (
+              <button
+                key={environment.id}
+                type="button"
+                onClick={() => onSetCallEnvironment(environment.id)}
+                className={`rounded-lg border px-3 py-3 text-left text-sm transition ${
+                  callEnvironment === environment.id
+                    ? "theme-choice-active theme-text-primary"
+                    : "theme-button-secondary"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-semibold">{environment.label}</span>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[11px] ${environment.accentClassName}`}
+                  >
+                    {environment.shortLabel}
+                  </span>
+                </div>
+                <p className="theme-text-muted mt-2 text-xs leading-5">
+                  {environment.helperText}
+                </p>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mb-6">
