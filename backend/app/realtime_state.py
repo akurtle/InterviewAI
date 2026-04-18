@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Any, Dict
 
 from aiortc import RTCPeerConnection
 from aiortc.contrib.media import MediaRelay
@@ -24,6 +24,9 @@ class WebRTCSession:
     connection_state: str = "new"
     ice_connection_state: str = "new"
     cleanup_task: asyncio.Task | None = None
+    pending_results_messages: list[dict[str, Any]] = field(default_factory=list)
+    announced_local_candidate_keys: set[str] = field(default_factory=set)
+    initial_answer_candidates_registered: bool = False
 
 
 pcs: Dict[str, RTCPeerConnection] = {}

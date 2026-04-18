@@ -50,6 +50,12 @@ type SessionEventMessage = {
   timestamp?: string;
 };
 
+type RemoteIceCandidateMessage = IceCandidatePayload & {
+  type: "ice_candidate";
+  session_id?: string;
+  timestamp?: string;
+};
+
 type RecorderMessage = {
   type?: string;
   text?: string;
@@ -91,6 +97,7 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
 ];
 const DEFAULT_RESULTS_HEARTBEAT_SECONDS = 20;
 const RESULTS_RECONNECT_DELAYS_MS = [1000, 2000, 5000];
+const LOCAL_ICE_BATCH_DELAY_MS = 75;
 
 const isRecoverableDeviceSelectionError = (error: unknown) =>
   error instanceof DOMException &&
@@ -174,6 +181,8 @@ const WebRTCRecorder: React.FC<Props> = ({
   const sessionActiveRef = useRef(false);
   const configRef = useRef<WebRTCConfig | null>(null);
   const pendingIceCandidatesRef = useRef<IceCandidatePayload[]>([]);
+  const pendingRemoteIceCandidatesRef = useRef<IceCandidatePayload[]>([]);
+  const pendingIceFlushTimerRef = useRef<number | null>(null);
   const iceGatheringCleanupRef = useRef<(() => void) | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -367,6 +376,13 @@ const WebRTCRecorder: React.FC<Props> = ({
     setError(socketError instanceof Error ? socketError.message : "Results WebSocket connection failed");
   };
 
+  const clearPendingIceFlushTimer = () => {
+    if (pendingIceFlushTimerRef.current) {
+      window.clearTimeout(pendingIceFlushTimerRef.current);
+      pendingIceFlushTimerRef.current = null;
+    }
+  };
+
   const loadWebRtcConfig = async () => {
     if (configRef.current) {
       return configRef.current;
@@ -392,33 +408,102 @@ const WebRTCRecorder: React.FC<Props> = ({
     }
   };
 
-  const postIceCandidate = async (sid: string, candidate: IceCandidatePayload) => {
-    await fetchWithLoopbackFallback(`${apiBase}/webrtc/candidate`, {
+  const postIceCandidates = async (sid: string, candidates: IceCandidatePayload[]) => {
+    const response = await fetchWithLoopbackFallback(`${apiBase}/webrtc/candidates`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         session_id: sid,
-        candidate: candidate.candidate,
-        sdpMid: candidate.sdpMid,
-        sdpMLineIndex: candidate.sdpMLineIndex,
-        usernameFragment: candidate.usernameFragment ?? null,
+        candidates: candidates.map((candidate) => ({
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+          usernameFragment: candidate.usernameFragment ?? null,
+        })),
       }),
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to send ICE candidates (${response.status})`);
+    }
   };
 
   const flushPendingIceCandidates = async (sid: string) => {
+    clearPendingIceFlushTimer();
     const pending = [...pendingIceCandidatesRef.current];
+    if (!pending.length) {
+      return;
+    }
     pendingIceCandidatesRef.current = [];
 
-    await Promise.allSettled(
-      pending.map(async (candidate) => {
-        try {
-          await postIceCandidate(sid, candidate);
-        } catch (candidateError) {
-          console.error("Failed to send pending ICE candidate:", candidateError);
-        }
+    try {
+      await postIceCandidates(sid, pending);
+    } catch (candidateError) {
+      console.error("Failed to send pending ICE candidates:", candidateError);
+      pendingIceCandidatesRef.current = [...pending, ...pendingIceCandidatesRef.current];
+      throw candidateError;
+    }
+  };
+
+  const schedulePendingIceFlush = (sid: string) => {
+    if (pendingIceFlushTimerRef.current) {
+      return;
+    }
+
+    pendingIceFlushTimerRef.current = window.setTimeout(() => {
+      pendingIceFlushTimerRef.current = null;
+      void flushPendingIceCandidates(sid).catch(() => {});
+    }, LOCAL_ICE_BATCH_DELAY_MS);
+  };
+
+  const queueIceCandidate = (sid: string, payload: IceCandidatePayload) => {
+    pendingIceCandidatesRef.current.push(payload);
+    if (payload.candidate === null) {
+      void flushPendingIceCandidates(sid).catch(() => {});
+      return;
+    }
+
+    schedulePendingIceFlush(sid);
+  };
+
+  const applyRemoteIceCandidate = async (payload: IceCandidatePayload) => {
+    const pc = pcRef.current;
+    if (!pc || !pc.remoteDescription) {
+      pendingRemoteIceCandidatesRef.current.push(payload);
+      return;
+    }
+
+    if (payload.candidate === null) {
+      await pc.addIceCandidate(null);
+      return;
+    }
+
+    await pc.addIceCandidate(
+      new RTCIceCandidate({
+        candidate: payload.candidate,
+        sdpMid: payload.sdpMid,
+        sdpMLineIndex: payload.sdpMLineIndex,
+        usernameFragment: payload.usernameFragment ?? undefined,
       })
     );
+  };
+
+  const flushPendingRemoteIceCandidates = async () => {
+    const pc = pcRef.current;
+    if (!pc || !pc.remoteDescription || !pendingRemoteIceCandidatesRef.current.length) {
+      return;
+    }
+
+    const pending = [...pendingRemoteIceCandidatesRef.current];
+    pendingRemoteIceCandidatesRef.current = [];
+
+    for (const candidate of pending) {
+      try {
+        await applyRemoteIceCandidate(candidate);
+      } catch (candidateError) {
+        console.error("Failed to apply remote ICE candidate:", candidateError);
+      }
+    }
   };
 
   const connectResultsWebSocket = async (sid: string) => {
@@ -439,7 +524,7 @@ const WebRTCRecorder: React.FC<Props> = ({
       ws.send(JSON.stringify({ type: "ping", session_id: sid, timestamp: Date.now() }));
     }, Math.max(5, heartbeatSeconds) * 1000);
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       try {
         const msg = JSON.parse(event.data) as RecorderMessage;
         setMessages((prev) => [...prev.slice(-11), msg]);
@@ -454,6 +539,11 @@ const WebRTCRecorder: React.FC<Props> = ({
 
         if (msg.type === "vision" || msg.type === "vision_status") {
           onVisionData?.(msg);
+          return;
+        }
+
+        if (msg.type === "ice_candidate") {
+          await applyRemoteIceCandidate(msg as RemoteIceCandidateMessage);
           return;
         }
 
@@ -726,15 +816,7 @@ const WebRTCRecorder: React.FC<Props> = ({
               usernameFragment: null,
             };
 
-        if (!sessionId && !nextSessionId) {
-          pendingIceCandidatesRef.current.push(payload);
-          return;
-        }
-
-        void postIceCandidate(nextSessionId, payload).catch((candidateError) => {
-          console.error("Failed to send ICE candidate:", candidateError);
-          pendingIceCandidatesRef.current.push(payload);
-        });
+        queueIceCandidate(nextSessionId, payload);
       };
 
       stream.getTracks().forEach((track) => {
@@ -772,6 +854,7 @@ const WebRTCRecorder: React.FC<Props> = ({
 
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       onStartupMetric?.("remote_description_ready_ms");
+      await flushPendingRemoteIceCandidates();
       await flushPendingIceCandidates(answer.session_id);
       updateConnectionDetails({ signaling: "stable" });
 
@@ -792,6 +875,7 @@ const WebRTCRecorder: React.FC<Props> = ({
     sessionActiveRef.current = false;
 
     clearResultsSocketTimers();
+    clearPendingIceFlushTimer();
     await stopLocalRecording();
 
     streamRef.current?.getTracks().forEach((track) => {
@@ -824,6 +908,7 @@ const WebRTCRecorder: React.FC<Props> = ({
     visionEnabledRef.current = false;
     visionBusyRef.current = false;
     pendingIceCandidatesRef.current = [];
+    pendingRemoteIceCandidatesRef.current = [];
 
     updateConnectionDetails({
       signaling: "idle",
