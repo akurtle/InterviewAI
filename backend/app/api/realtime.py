@@ -5,8 +5,15 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
-from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
+from aiortc import (
+    RTCConfiguration,
+    RTCIceCandidate,
+    RTCIceServer,
+    RTCPeerConnection,
+    RTCSessionDescription,
+)
 from aiortc.sdp import candidate_from_sdp
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -201,6 +208,40 @@ def parse_candidate(payload: CandidatePayload) -> RTCIceCandidate | None:
     return candidate
 
 
+def build_rtc_configuration() -> RTCConfiguration | None:
+    raw_servers = settings.webrtc_ice_servers or []
+    if not raw_servers:
+        return None
+
+    ice_servers: list[RTCIceServer] = []
+    for server in raw_servers:
+        if not isinstance(server, dict):
+            continue
+
+        urls = server.get("urls")
+        if isinstance(urls, str):
+            normalized_urls: str | list[str] = urls.strip()
+        elif isinstance(urls, list):
+            normalized_urls = [str(url).strip() for url in urls if str(url).strip()]
+        else:
+            continue
+
+        if not normalized_urls:
+            continue
+
+        kwargs: dict[str, Any] = {"urls": normalized_urls}
+        if server.get("username") is not None:
+            kwargs["username"] = str(server["username"])
+        if server.get("credential") is not None:
+            kwargs["credential"] = str(server["credential"])
+        if server.get("credentialType") is not None:
+            kwargs["credentialType"] = str(server["credentialType"])
+
+        ice_servers.append(RTCIceServer(**kwargs))
+
+    return RTCConfiguration(iceServers=ice_servers) if ice_servers else None
+
+
 @router.get("/webrtc/config")
 async def webrtc_config():
     return {
@@ -213,7 +254,8 @@ async def webrtc_config():
 @router.post("/webrtc/offer")
 async def webrtc_offer(offer: Offer):
     session_id = offer.session_id or str(uuid.uuid4())
-    pc = RTCPeerConnection()
+    rtc_configuration = build_rtc_configuration()
+    pc = RTCPeerConnection(configuration=rtc_configuration) if rtc_configuration else RTCPeerConnection()
     register_peer_connection(
         session_id,
         pc,
@@ -243,6 +285,7 @@ async def add_webrtc_candidate(payload: SessionCandidatePayload):
 
     candidate = parse_candidate(payload)
     if candidate is None:
+        await session.peer_connection.addIceCandidate(None)
         return {"status": "ok", "session_id": payload.session_id, "completed": True}
 
     await session.peer_connection.addIceCandidate(candidate)

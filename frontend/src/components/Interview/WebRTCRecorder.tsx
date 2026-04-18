@@ -125,32 +125,32 @@ const buildMediaConstraints = ({
       : false,
 });
 
-const waitForIceGatheringComplete = (pc: RTCPeerConnection, timeoutMs = 2500) =>
-  new Promise<void>((resolve) => {
-    if (pc.iceGatheringState === "complete") {
-      resolve();
+const observeIceGatheringComplete = (
+  pc: RTCPeerConnection,
+  onComplete: () => void
+) => {
+  if (pc.iceGatheringState === "complete") {
+    onComplete();
+    return () => {};
+  }
+
+  let isDone = false;
+  const handleChange = () => {
+    if (isDone || pc.iceGatheringState !== "complete") {
       return;
     }
 
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      resolve();
-    }, timeoutMs);
+    isDone = true;
+    pc.removeEventListener("icegatheringstatechange", handleChange);
+    onComplete();
+  };
 
-    const cleanup = () => {
-      window.clearTimeout(timeout);
-      pc.removeEventListener("icegatheringstatechange", handleChange);
-    };
-
-    const handleChange = () => {
-      if (pc.iceGatheringState === "complete") {
-        cleanup();
-        resolve();
-      }
-    };
-
-    pc.addEventListener("icegatheringstatechange", handleChange);
-  });
+  pc.addEventListener("icegatheringstatechange", handleChange);
+  return () => {
+    isDone = true;
+    pc.removeEventListener("icegatheringstatechange", handleChange);
+  };
+};
 
 const WebRTCRecorder: React.FC<Props> = ({
   mode = "both",
@@ -174,6 +174,7 @@ const WebRTCRecorder: React.FC<Props> = ({
   const sessionActiveRef = useRef(false);
   const configRef = useRef<WebRTCConfig | null>(null);
   const pendingIceCandidatesRef = useRef<IceCandidatePayload[]>([]);
+  const iceGatheringCleanupRef = useRef<(() => void) | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const visionIntervalRef = useRef<number | null>(null);
@@ -360,6 +361,12 @@ const WebRTCRecorder: React.FC<Props> = ({
     }
   };
 
+  const reportResultsSocketFailure = (socketError: unknown) => {
+    console.error("Results WebSocket error:", socketError);
+    updateConnectionDetails({ resultsSocket: "error" });
+    setError(socketError instanceof Error ? socketError.message : "Results WebSocket connection failed");
+  };
+
   const loadWebRtcConfig = async () => {
     if (configRef.current) {
       return configRef.current;
@@ -403,13 +410,15 @@ const WebRTCRecorder: React.FC<Props> = ({
     const pending = [...pendingIceCandidatesRef.current];
     pendingIceCandidatesRef.current = [];
 
-    for (const candidate of pending) {
-      try {
-        await postIceCandidate(sid, candidate);
-      } catch (candidateError) {
-        console.error("Failed to send pending ICE candidate:", candidateError);
-      }
-    }
+    await Promise.allSettled(
+      pending.map(async (candidate) => {
+        try {
+          await postIceCandidate(sid, candidate);
+        } catch (candidateError) {
+          console.error("Failed to send pending ICE candidate:", candidateError);
+        }
+      })
+    );
   };
 
   const connectResultsWebSocket = async (sid: string) => {
@@ -665,6 +674,11 @@ const WebRTCRecorder: React.FC<Props> = ({
         iceServers: config.ice_servers?.length ? config.ice_servers : DEFAULT_ICE_SERVERS,
       });
       pcRef.current = pc;
+      iceGatheringCleanupRef.current?.();
+      iceGatheringCleanupRef.current = observeIceGatheringComplete(pc, () => {
+        onStartupMetric?.("ice_gathering_complete_ms");
+        iceGatheringCleanupRef.current = null;
+      });
 
       pc.onconnectionstatechange = () => {
         const peerState = pc.connectionState;
@@ -693,21 +707,24 @@ const WebRTCRecorder: React.FC<Props> = ({
       };
 
       pc.onicecandidate = (event) => {
-        if (!event.candidate) {
-          return;
-        }
-
-        const payload: IceCandidatePayload = {
-          candidate: event.candidate.candidate,
-          sdpMid: event.candidate.sdpMid,
-          sdpMLineIndex: event.candidate.sdpMLineIndex,
-          usernameFragment:
-            "usernameFragment" in event.candidate
-              ? (event.candidate as RTCPeerConnectionIceEvent["candidate"] & {
-                  usernameFragment?: string | null;
-                }).usernameFragment ?? null
-              : null,
-        };
+        const payload: IceCandidatePayload = event.candidate
+          ? {
+              candidate: event.candidate.candidate,
+              sdpMid: event.candidate.sdpMid,
+              sdpMLineIndex: event.candidate.sdpMLineIndex,
+              usernameFragment:
+                "usernameFragment" in event.candidate
+                  ? (event.candidate as RTCPeerConnectionIceEvent["candidate"] & {
+                      usernameFragment?: string | null;
+                    }).usernameFragment ?? null
+                  : null,
+            }
+          : {
+              candidate: null,
+              sdpMid: null,
+              sdpMLineIndex: null,
+              usernameFragment: null,
+            };
 
         if (!sessionId && !nextSessionId) {
           pendingIceCandidatesRef.current.push(payload);
@@ -724,14 +741,14 @@ const WebRTCRecorder: React.FC<Props> = ({
         pc.addTrack(track, stream);
       });
 
-      await connectResultsWebSocket(nextSessionId);
       updateConnectionDetails({ signaling: "creating_offer" });
 
       const offer = await pc.createOffer();
       onStartupMetric?.("offer_created_ms");
       await pc.setLocalDescription(offer);
-      await waitForIceGatheringComplete(pc);
-      onStartupMetric?.("ice_gathering_complete_ms");
+      void connectResultsWebSocket(nextSessionId).catch((socketError: unknown) => {
+        reportResultsSocketFailure(socketError);
+      });
 
       const response = await fetchWithLoopbackFallback(`${apiBase}/webrtc/offer`, {
         method: "POST",
@@ -790,6 +807,8 @@ const WebRTCRecorder: React.FC<Props> = ({
       pcRef.current.close();
       pcRef.current = null;
     }
+    iceGatheringCleanupRef.current?.();
+    iceGatheringCleanupRef.current = null;
 
     wsRef.current?.close();
     wsRef.current = null;
