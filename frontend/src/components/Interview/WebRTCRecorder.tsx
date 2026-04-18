@@ -55,6 +55,12 @@ type SessionEventMessage = {
   timestamp?: string;
 };
 
+type RemoteIceCandidateMessage = IceCandidatePayload & {
+  type: "ice_candidate";
+  session_id?: string;
+  timestamp?: string;
+};
+
 type RecorderMessage = {
   type?: string;
   text?: string;
@@ -98,6 +104,7 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
 ];
 const DEFAULT_RESULTS_HEARTBEAT_SECONDS = 20;
 const RESULTS_RECONNECT_DELAYS_MS = [1000, 2000, 5000];
+const LOCAL_ICE_BATCH_DELAY_MS = 75;
 
 const isRecoverableDeviceSelectionError = (error: unknown) =>
   error instanceof DOMException &&
@@ -132,442 +139,32 @@ const buildMediaConstraints = ({
       : false,
 });
 
-const AUDIENCE_MEMBERS = [
-  "Hiring team",
-  "Product lead",
-  "Founder",
-  "Design panel",
-  "Investors",
-  "Audience",
-];
+const observeIceGatheringComplete = (
+  pc: RTCPeerConnection,
+  onComplete: () => void
+) => {
+  if (pc.iceGatheringState === "complete") {
+    onComplete();
+    return () => {};
+  }
 
-const PARTICIPANT_STACK = ["Interviewer"];
-
-const formatCallClock = (elapsedMs: number) => {
-  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return [hours, minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
-};
-
-const TeamsIcon = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => (
-  <span className="flex h-9 w-9 items-center justify-center rounded-full text-white/85 transition hover:bg-white/10">
-    {children}
-  </span>
-);
-
-const MeetControlButton = ({
-  children,
-  danger = false,
-}: {
-  children: React.ReactNode;
-  danger?: boolean;
-}) => (
-  <span
-    className={`flex h-11 w-11 items-center justify-center rounded-full shadow-[0_8px_20px_rgba(0,0,0,0.22)] ${
-      danger ? "bg-[#ff4e45] text-white" : "bg-[#5a5a5a] text-white/90"
-    }`}
-  >
-    {children}
-  </span>
-);
-
-const renderTeamsScene = ({
-  status,
-  elapsedLabel,
-  videoRef,
-  onLeave,
-}: {
-  status: ConnectionStatus;
-  elapsedLabel: string;
-  videoRef: React.RefObject<HTMLVideoElement | null>;
-  onLeave: () => void;
-}) => (
-  <>
-    <div className="absolute inset-0 bg-[#3b3a39]" />
-
-    <div className="absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-between bg-[#2d2c2b] px-4 shadow-[0_2px_8px_rgba(0,0,0,0.28)]">
-      <div className="text-sm font-semibold tracking-wide text-white/70">{elapsedLabel}</div>
-
-      <div className="flex items-center gap-1">
-        <TeamsIcon>
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M17 20h5v-2a4 4 0 00-5-3.87M17 20H7m10 0v-2c0-.65-.1-1.28-.3-1.87M7 20H2v-2a4 4 0 015-3.87M7 20v-2c0-.65.1-1.28.3-1.87m0 0a5 5 0 019.4 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-        </TeamsIcon>
-        <TeamsIcon>
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M8 10h8M8 14h5m-8 6h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-        </TeamsIcon>
-        <TeamsIcon>
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M15 10l4.55-2.27A1 1 0 0121 8.62v6.76a1 1 0 01-1.45.89L15 14M4 6h8a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2z" />
-          </svg>
-        </TeamsIcon>
-        <TeamsIcon>
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 5v14m7-7H5" />
-          </svg>
-        </TeamsIcon>
-        <TeamsIcon>
-          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-            <circle cx="5" cy="12" r="1.6" />
-            <circle cx="12" cy="12" r="1.6" />
-            <circle cx="19" cy="12" r="1.6" />
-          </svg>
-        </TeamsIcon>
-
-        <div className="mx-2 h-7 w-px bg-white/12" />
-
-        <TeamsIcon>
-          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M4 8.5A2.5 2.5 0 016.5 6h7A2.5 2.5 0 0116 8.5v1.36l2.93-1.46A1.2 1.2 0 0120.67 9.47v5.06a1.2 1.2 0 01-1.74 1.07L16 14.14v1.36A2.5 2.5 0 0113.5 18h-7A2.5 2.5 0 014 15.5v-7z" />
-          </svg>
-        </TeamsIcon>
-        <TeamsIcon>
-          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 15.75A3.75 3.75 0 018.25 12V7.75a3.75 3.75 0 117.5 0V12A3.75 3.75 0 0112 15.75zm5-3.75a.75.75 0 011.5 0 6.5 6.5 0 01-5.75 6.45V21h2a.75.75 0 010 1.5H9.25a.75.75 0 010-1.5h2v-2.55A6.5 6.5 0 015.5 12a.75.75 0 011.5 0 5 5 0 0010 0z" />
-          </svg>
-        </TeamsIcon>
-        <TeamsIcon>
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 12h10m0 0l-3.5-3.5M14 12l-3.5 3.5M14 5h4a1 1 0 011 1v12a1 1 0 01-1 1h-4" />
-          </svg>
-        </TeamsIcon>
-
-        <button
-          type="button"
-          onClick={onLeave}
-          className="ml-2 flex h-10 items-center gap-2 rounded-md bg-[#d94b67] px-5 text-sm font-semibold text-white transition hover:bg-[#e05674]"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 15.5c2.5-2.2 5.17-3.3 8-3.3s5.5 1.1 8 3.3" />
-          </svg>
-          Leave
-        </button>
-      </div>
-    </div>
-
-    <div className="absolute inset-x-0 bottom-0 top-14 grid grid-cols-[1fr_6px_1fr] bg-[#3b3a39]">
-      <div className="relative overflow-hidden bg-[#7f876f]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.18),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.08),transparent_38%)]" />
-        <div className="absolute inset-x-[14%] bottom-0 top-[8%] rounded-t-[20px] bg-[linear-gradient(180deg,rgba(122,128,107,0.92),rgba(230,233,235,0.88))]" />
-        <div className="absolute left-1/2 top-[22%] h-28 w-28 -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_50%_34%,#f2d8c7,#d3aa8d_68%,#a1775f)] shadow-[0_10px_25px_rgba(0,0,0,0.12)]" />
-        <div className="absolute left-1/2 top-[18%] h-16 w-24 -translate-x-1/2 rounded-t-[999px] rounded-b-[18px] bg-[linear-gradient(180deg,#4f382f,#2a1d18)]" />
-        <div className="absolute left-1/2 top-[34%] h-40 w-56 -translate-x-1/2 rounded-t-[120px] bg-[linear-gradient(180deg,#5a8fcb,#5b7fb0)]" />
-        <div className="absolute left-1/2 top-[47%] h-16 w-14 -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_50%_30%,rgba(255,255,255,0.24),transparent_62%)]" />
-        <div className="absolute bottom-5 left-5 rounded bg-black/48 px-3 py-1 text-sm font-medium text-white">
-          Interviewer
-        </div>
-      </div>
-
-      <div className="bg-[#4e4c4b]" />
-
-      <div className="relative overflow-hidden bg-[#d6cbbd]">
-        <video ref={videoRef} className="absolute inset-0 h-full w-full object-cover" playsInline muted />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent_22%,transparent_72%,rgba(0,0,0,0.16))]" />
-        <div className="absolute bottom-5 left-5 rounded bg-black/48 px-3 py-1 text-sm font-medium text-white">
-          You
-        </div>
-
-        {(status === "idle" || status === "error") && (
-          <div className="absolute inset-0 flex items-center justify-center px-6">
-            <div className="rounded-2xl bg-black/34 px-5 py-4 text-center text-white shadow-[0_18px_45px_rgba(0,0,0,0.22)] backdrop-blur-sm">
-              <p className="text-base font-semibold">
-                {status === "error" ? "Camera preview unavailable" : "Camera preview ready"}
-              </p>
-              <p className="mt-1 text-sm text-white/72">
-                {status === "error"
-                  ? "Check your device access and try the session again."
-                  : "Start the session to enter the Teams-style room."}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-
-    {status === "connecting" && (
-      <div className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/45 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">
-        Joining meeting...
-      </div>
-    )}
-  </>
-);
-
-const renderMeetScene = ({
-  status,
-  videoRef,
-  onLeave,
-}: {
-  status: ConnectionStatus;
-  videoRef: React.RefObject<HTMLVideoElement | null>;
-  onLeave: () => void;
-}) => (
-  <>
-    <div className="absolute inset-0 bg-[#363636]" />
-
-    <div className="absolute inset-x-3 top-3 z-20 flex items-center rounded-md bg-[#4a4a4a] px-3 py-2 text-sm text-white/85 shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
-      <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#6d758a] text-[10px] font-semibold text-white">
-        F
-      </span>
-      <span>Fathima is presenting</span>
-    </div>
-
-    <div className="absolute inset-x-7 bottom-16 top-12 grid grid-cols-[minmax(0,1.65fr)_200px] gap-6">
-      <div className="relative overflow-hidden rounded-[4px] bg-[#cbc7be] shadow-[0_20px_40px_rgba(0,0,0,0.18)]">
-        <video ref={videoRef} className="absolute inset-0 h-full w-full object-cover" playsInline muted />
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.22),transparent_32%,transparent_68%,rgba(0,0,0,0.12))]" />
-
-        {(status === "idle" || status === "error") && (
-          <div className="absolute inset-0 flex items-center justify-center px-6">
-            <div className="rounded-2xl bg-black/28 px-5 py-4 text-center text-white shadow-[0_18px_45px_rgba(0,0,0,0.2)] backdrop-blur-sm">
-              <p className="text-base font-semibold">
-                {status === "error" ? "Presentation preview unavailable" : "Presentation preview ready"}
-              </p>
-              <p className="mt-1 text-sm text-white/72">
-                {status === "error"
-                  ? "Check your camera access and rejoin the room."
-                  : "Start the session to enter the Meet-style layout."}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="content-start">
-        <div className="relative h-[260px] overflow-hidden rounded-[4px] bg-[#7a684f] shadow-[0_12px_28px_rgba(0,0,0,0.16)]">
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,#8a6237,#d6a761)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.16),transparent_24%),linear-gradient(180deg,transparent_60%,rgba(0,0,0,0.24))]" />
-          <div className="absolute inset-x-[18%] bottom-0 top-[18%] rounded-t-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.03))]" />
-          <div className="absolute left-1/2 top-[24%] h-12 w-12 -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_50%_35%,#f2d8c7,#d1a98f_72%,#9a745e)]" />
-          <div className="absolute left-1/2 top-[37%] h-16 w-24 -translate-x-1/2 rounded-t-[40px] bg-[linear-gradient(180deg,rgba(42,29,24,0.85),rgba(42,29,24,0.35))]" />
-          <div className="absolute bottom-1.5 left-2 text-[11px] font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]">
-            Interviewer
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div className="absolute inset-x-7 bottom-4 z-20 flex items-center justify-between">
-      <div className="text-sm font-medium text-white/85">Class meeting</div>
-
-      <div className="flex items-center gap-3">
-        <MeetControlButton>
-          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 15.75A3.75 3.75 0 018.25 12V7.75a3.75 3.75 0 117.5 0V12A3.75 3.75 0 0112 15.75zm5-3.75a.75.75 0 011.5 0 6.5 6.5 0 01-5.75 6.45V21h2a.75.75 0 010 1.5H9.25a.75.75 0 010-1.5h2v-2.55A6.5 6.5 0 015.5 12a.75.75 0 011.5 0 5 5 0 0010 0z" />
-          </svg>
-        </MeetControlButton>
-        <MeetControlButton>
-          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M4 8.5A2.5 2.5 0 016.5 6h7A2.5 2.5 0 0116 8.5v1.36l2.93-1.46A1.2 1.2 0 0120.67 9.47v5.06a1.2 1.2 0 01-1.74 1.07L16 14.14v1.36A2.5 2.5 0 0113.5 18h-7A2.5 2.5 0 014 15.5v-7z" />
-          </svg>
-        </MeetControlButton>
-        <MeetControlButton>
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 12h16M12 4v16" />
-          </svg>
-        </MeetControlButton>
-        <MeetControlButton>
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 7h16M7 12h10M10 17h4" />
-          </svg>
-        </MeetControlButton>
-        <MeetControlButton>
-          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-            <circle cx="12" cy="5.5" r="1.6" />
-            <circle cx="12" cy="12" r="1.6" />
-            <circle cx="12" cy="18.5" r="1.6" />
-          </svg>
-        </MeetControlButton>
-        <button
-          type="button"
-          onClick={onLeave}
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-[#ff4e45] text-white shadow-[0_8px_20px_rgba(0,0,0,0.22)] transition hover:bg-[#ff5d54]"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 15.5c2.5-2.2 5.17-3.3 8-3.3s5.5 1.1 8 3.3" />
-          </svg>
-        </button>
-      </div>
-
-      <div className="flex items-center gap-3 text-white/78">
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a4 4 0 00-5-3.87M17 20H7m10 0v-2c0-.65-.1-1.28-.3-1.87M7 20H2v-2a4 4 0 015-3.87M7 20v-2c0-.65.1-1.28.3-1.87m0 0a5 5 0 019.4 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h8M8 14h5m-8 6h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 18h16M7 15V9m5 6V6m5 9v-3" />
-        </svg>
-      </div>
-    </div>
-
-    {status === "connecting" && (
-      <div className="absolute bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/34 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">
-        Joining call...
-      </div>
-    )}
-  </>
-);
-
-const renderAudienceScene = (
-  status: ConnectionStatus,
-  environmentLabel: string,
-  sessionType: SessionType
-) => (
-  <>
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(251,191,36,0.18),transparent_24%),radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.08),transparent_14%),radial-gradient(circle_at_75%_20%,rgba(255,255,255,0.08),transparent_14%)]" />
-    <div className="absolute inset-x-0 top-0 flex items-center justify-between px-6 py-5">
-      <div>
-        <p className="text-xs uppercase tracking-[0.28em] text-white/55">
-          {environmentLabel}
-        </p>
-        <p className="mt-1 text-sm font-semibold text-white/90">
-          {sessionType === "pitch" ? "Presentation in progress" : "Room attention on speaker"}
-        </p>
-      </div>
-      <div className="rounded-full border border-white/15 bg-white/8 px-3 py-1 text-xs font-medium text-white/70">
-        {status === "connected" ? "Audience view live" : "Audience view ready"}
-      </div>
-    </div>
-
-    <div className="absolute inset-x-6 top-20 grid grid-cols-3 gap-3 md:grid-cols-6">
-      {AUDIENCE_MEMBERS.map((member, index) => (
-        <div
-          key={member}
-          className="rounded-2xl border border-white/10 bg-white/6 px-3 py-4 text-center shadow-[0_18px_45px_rgba(0,0,0,0.22)] backdrop-blur-sm"
-        >
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white/90">
-            {index + 1}
-          </div>
-          <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.18em] text-white/55">
-            {member}
-          </p>
-        </div>
-      ))}
-    </div>
-
-    <div className="absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.18)_20%,rgba(6,6,10,0.92))]" />
-    <div className="absolute inset-x-0 bottom-0 h-24 bg-[radial-gradient(circle_at_50%_0%,rgba(251,191,36,0.2),transparent_36%),linear-gradient(180deg,rgba(69,39,14,0.65),rgba(17,10,6,0.92))]" />
-    <div className="absolute left-1/2 bottom-10 h-20 w-28 -translate-x-1/2 rounded-t-[40px] border border-white/10 bg-black/35 shadow-[0_30px_50px_rgba(0,0,0,0.35)]" />
-    <div className="absolute inset-x-6 bottom-5 flex items-center justify-between rounded-2xl border border-white/10 bg-black/35 px-4 py-3 backdrop-blur-sm">
-      <div>
-        <p className="text-xs uppercase tracking-[0.22em] text-white/45">
-          Presenter prompt
-        </p>
-        <p className="mt-1 text-sm text-white/85">
-          {sessionType === "pitch"
-            ? "Keep eye-line forward and land the value proposition with confidence."
-            : "Answer as if the entire room is listening to your next point."}
-        </p>
-      </div>
-      <div className="hidden rounded-full border border-amber-200/20 bg-amber-200/12 px-3 py-1 text-xs font-semibold text-amber-100 md:block">
-        No self-view
-      </div>
-    </div>
-  </>
-);
-
-const renderPlatformScene = (
-  status: ConnectionStatus,
-  environmentLabel: string,
-  sessionType: SessionType,
-  controlClassName: string
-) => (
-  <>
-    <div className="absolute inset-x-0 top-0 flex items-center justify-between px-6 py-5">
-      <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-medium text-white/70 backdrop-blur-sm">
-        {environmentLabel}
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-medium text-white/70 backdrop-blur-sm">
-          {sessionType === "pitch" ? "Pitch rehearsal" : "Interview practice"}
-        </div>
-        <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-medium text-white/70 backdrop-blur-sm">
-          {status === "connected" ? "Live" : status === "connecting" ? "Joining..." : "Preview"}
-        </div>
-      </div>
-    </div>
-
-    <div className="absolute right-4 top-16 hidden w-40 space-y-2 lg:block">
-      {PARTICIPANT_STACK.map((participant) => (
-        <div
-          key={participant}
-          className="overflow-hidden rounded-2xl border border-white/10 bg-black/25 p-2 shadow-[0_18px_45px_rgba(0,0,0,0.2)] backdrop-blur-sm"
-        >
-          <div className="mb-2 h-28 rounded-xl bg-[linear-gradient(135deg,rgba(209,167,129,0.92),rgba(120,83,57,0.92))]" />
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/60">
-            {participant}
-          </p>
-        </div>
-      ))}
-    </div>
-
-    <div className="absolute inset-x-6 bottom-6 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 backdrop-blur-md">
-      <div>
-        <p className="text-xs uppercase tracking-[0.22em] text-white/45">
-          Practice cue
-        </p>
-        <p className="mt-1 text-sm text-white/85">
-          {sessionType === "pitch"
-            ? "Lead with the problem, then your solution, then measurable impact."
-            : "Pause, structure the answer, and let the room breathe between points."}
-        </p>
-      </div>
-
-      <div className="hidden items-center gap-2 md:flex">
-        <div className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-medium text-white/70">
-          Mic
-        </div>
-        <div className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-medium text-white/70">
-          Cam
-        </div>
-        <div className={`rounded-full px-3 py-1 text-xs font-semibold ${controlClassName}`}>
-          Present
-        </div>
-      </div>
-    </div>
-  </>
-);
-
-const waitForIceGatheringComplete = (pc: RTCPeerConnection, timeoutMs = 2500) =>
-  new Promise<void>((resolve) => {
-    if (pc.iceGatheringState === "complete") {
-      resolve();
+  let isDone = false;
+  const handleChange = () => {
+    if (isDone || pc.iceGatheringState !== "complete") {
       return;
     }
 
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      resolve();
-    }, timeoutMs);
+    isDone = true;
+    pc.removeEventListener("icegatheringstatechange", handleChange);
+    onComplete();
+  };
 
-    const cleanup = () => {
-      window.clearTimeout(timeout);
-      pc.removeEventListener("icegatheringstatechange", handleChange);
-    };
-
-    const handleChange = () => {
-      if (pc.iceGatheringState === "complete") {
-        cleanup();
-        resolve();
-      }
-    };
-
-    pc.addEventListener("icegatheringstatechange", handleChange);
-  });
+  pc.addEventListener("icegatheringstatechange", handleChange);
+  return () => {
+    isDone = true;
+    pc.removeEventListener("icegatheringstatechange", handleChange);
+  };
+};
 
 const WebRTCRecorder: React.FC<Props> = ({
   mode = "both",
@@ -594,6 +191,9 @@ const WebRTCRecorder: React.FC<Props> = ({
   const sessionActiveRef = useRef(false);
   const configRef = useRef<WebRTCConfig | null>(null);
   const pendingIceCandidatesRef = useRef<IceCandidatePayload[]>([]);
+  const pendingRemoteIceCandidatesRef = useRef<IceCandidatePayload[]>([]);
+  const pendingIceFlushTimerRef = useRef<number | null>(null);
+  const iceGatheringCleanupRef = useRef<(() => void) | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const visionIntervalRef = useRef<number | null>(null);
@@ -789,6 +389,19 @@ const WebRTCRecorder: React.FC<Props> = ({
     }
   };
 
+  const reportResultsSocketFailure = (socketError: unknown) => {
+    console.error("Results WebSocket error:", socketError);
+    updateConnectionDetails({ resultsSocket: "error" });
+    setError(socketError instanceof Error ? socketError.message : "Results WebSocket connection failed");
+  };
+
+  const clearPendingIceFlushTimer = () => {
+    if (pendingIceFlushTimerRef.current) {
+      window.clearTimeout(pendingIceFlushTimerRef.current);
+      pendingIceFlushTimerRef.current = null;
+    }
+  };
+
   const loadWebRtcConfig = async () => {
     if (configRef.current) {
       return configRef.current;
@@ -814,29 +427,100 @@ const WebRTCRecorder: React.FC<Props> = ({
     }
   };
 
-  const postIceCandidate = async (sid: string, candidate: IceCandidatePayload) => {
-    await fetchWithLoopbackFallback(`${apiBase}/webrtc/candidate`, {
+  const postIceCandidates = async (sid: string, candidates: IceCandidatePayload[]) => {
+    const response = await fetchWithLoopbackFallback(`${apiBase}/webrtc/candidates`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         session_id: sid,
-        candidate: candidate.candidate,
-        sdpMid: candidate.sdpMid,
-        sdpMLineIndex: candidate.sdpMLineIndex,
-        usernameFragment: candidate.usernameFragment ?? null,
+        candidates: candidates.map((candidate) => ({
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+          usernameFragment: candidate.usernameFragment ?? null,
+        })),
       }),
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to send ICE candidates (${response.status})`);
+    }
   };
 
   const flushPendingIceCandidates = async (sid: string) => {
+    clearPendingIceFlushTimer();
     const pending = [...pendingIceCandidatesRef.current];
+    if (!pending.length) {
+      return;
+    }
     pendingIceCandidatesRef.current = [];
+
+    try {
+      await postIceCandidates(sid, pending);
+    } catch (candidateError) {
+      console.error("Failed to send pending ICE candidates:", candidateError);
+      pendingIceCandidatesRef.current = [...pending, ...pendingIceCandidatesRef.current];
+      throw candidateError;
+    }
+  };
+
+  const schedulePendingIceFlush = (sid: string) => {
+    if (pendingIceFlushTimerRef.current) {
+      return;
+    }
+
+    pendingIceFlushTimerRef.current = window.setTimeout(() => {
+      pendingIceFlushTimerRef.current = null;
+      void flushPendingIceCandidates(sid).catch(() => {});
+    }, LOCAL_ICE_BATCH_DELAY_MS);
+  };
+
+  const queueIceCandidate = (sid: string, payload: IceCandidatePayload) => {
+    pendingIceCandidatesRef.current.push(payload);
+    if (payload.candidate === null) {
+      void flushPendingIceCandidates(sid).catch(() => {});
+      return;
+    }
+
+    schedulePendingIceFlush(sid);
+  };
+
+  const applyRemoteIceCandidate = async (payload: IceCandidatePayload) => {
+    const pc = pcRef.current;
+    if (!pc || !pc.remoteDescription) {
+      pendingRemoteIceCandidatesRef.current.push(payload);
+      return;
+    }
+
+    if (payload.candidate === null) {
+      await pc.addIceCandidate(null);
+      return;
+    }
+
+    await pc.addIceCandidate(
+      new RTCIceCandidate({
+        candidate: payload.candidate,
+        sdpMid: payload.sdpMid,
+        sdpMLineIndex: payload.sdpMLineIndex,
+        usernameFragment: payload.usernameFragment ?? undefined,
+      })
+    );
+  };
+
+  const flushPendingRemoteIceCandidates = async () => {
+    const pc = pcRef.current;
+    if (!pc || !pc.remoteDescription || !pendingRemoteIceCandidatesRef.current.length) {
+      return;
+    }
+
+    const pending = [...pendingRemoteIceCandidatesRef.current];
+    pendingRemoteIceCandidatesRef.current = [];
 
     for (const candidate of pending) {
       try {
-        await postIceCandidate(sid, candidate);
+        await applyRemoteIceCandidate(candidate);
       } catch (candidateError) {
-        console.error("Failed to send pending ICE candidate:", candidateError);
+        console.error("Failed to apply remote ICE candidate:", candidateError);
       }
     }
   };
@@ -859,7 +543,7 @@ const WebRTCRecorder: React.FC<Props> = ({
       ws.send(JSON.stringify({ type: "ping", session_id: sid, timestamp: Date.now() }));
     }, Math.max(5, heartbeatSeconds) * 1000);
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       try {
         const msg = JSON.parse(event.data) as RecorderMessage;
         setMessages((prev) => [...prev.slice(-11), msg]);
@@ -874,6 +558,11 @@ const WebRTCRecorder: React.FC<Props> = ({
 
         if (msg.type === "vision" || msg.type === "vision_status") {
           onVisionData?.(msg);
+          return;
+        }
+
+        if (msg.type === "ice_candidate") {
+          await applyRemoteIceCandidate(msg as RemoteIceCandidateMessage);
           return;
         }
 
@@ -1094,6 +783,11 @@ const WebRTCRecorder: React.FC<Props> = ({
         iceServers: config.ice_servers?.length ? config.ice_servers : DEFAULT_ICE_SERVERS,
       });
       pcRef.current = pc;
+      iceGatheringCleanupRef.current?.();
+      iceGatheringCleanupRef.current = observeIceGatheringComplete(pc, () => {
+        onStartupMetric?.("ice_gathering_complete_ms");
+        iceGatheringCleanupRef.current = null;
+      });
 
       pc.onconnectionstatechange = () => {
         const peerState = pc.connectionState;
@@ -1122,45 +816,40 @@ const WebRTCRecorder: React.FC<Props> = ({
       };
 
       pc.onicecandidate = (event) => {
-        if (!event.candidate) {
-          return;
-        }
+        const payload: IceCandidatePayload = event.candidate
+          ? {
+              candidate: event.candidate.candidate,
+              sdpMid: event.candidate.sdpMid,
+              sdpMLineIndex: event.candidate.sdpMLineIndex,
+              usernameFragment:
+                "usernameFragment" in event.candidate
+                  ? (event.candidate as RTCPeerConnectionIceEvent["candidate"] & {
+                      usernameFragment?: string | null;
+                    }).usernameFragment ?? null
+                  : null,
+            }
+          : {
+              candidate: null,
+              sdpMid: null,
+              sdpMLineIndex: null,
+              usernameFragment: null,
+            };
 
-        const payload: IceCandidatePayload = {
-          candidate: event.candidate.candidate,
-          sdpMid: event.candidate.sdpMid,
-          sdpMLineIndex: event.candidate.sdpMLineIndex,
-          usernameFragment:
-            "usernameFragment" in event.candidate
-              ? (event.candidate as RTCPeerConnectionIceEvent["candidate"] & {
-                  usernameFragment?: string | null;
-                }).usernameFragment ?? null
-              : null,
-        };
-
-        if (!sessionId && !nextSessionId) {
-          pendingIceCandidatesRef.current.push(payload);
-          return;
-        }
-
-        void postIceCandidate(nextSessionId, payload).catch((candidateError) => {
-          console.error("Failed to send ICE candidate:", candidateError);
-          pendingIceCandidatesRef.current.push(payload);
-        });
+        queueIceCandidate(nextSessionId, payload);
       };
 
       stream.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
       });
 
-      await connectResultsWebSocket(nextSessionId);
       updateConnectionDetails({ signaling: "creating_offer" });
 
       const offer = await pc.createOffer();
       onStartupMetric?.("offer_created_ms");
       await pc.setLocalDescription(offer);
-      await waitForIceGatheringComplete(pc);
-      onStartupMetric?.("ice_gathering_complete_ms");
+      void connectResultsWebSocket(nextSessionId).catch((socketError: unknown) => {
+        reportResultsSocketFailure(socketError);
+      });
 
       const response = await fetchWithLoopbackFallback(`${apiBase}/webrtc/offer`, {
         method: "POST",
@@ -1184,6 +873,7 @@ const WebRTCRecorder: React.FC<Props> = ({
 
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       onStartupMetric?.("remote_description_ready_ms");
+      await flushPendingRemoteIceCandidates();
       await flushPendingIceCandidates(answer.session_id);
       updateConnectionDetails({ signaling: "stable" });
 
@@ -1204,6 +894,7 @@ const WebRTCRecorder: React.FC<Props> = ({
     sessionActiveRef.current = false;
 
     clearResultsSocketTimers();
+    clearPendingIceFlushTimer();
     await stopLocalRecording();
 
     streamRef.current?.getTracks().forEach((track) => {
@@ -1219,6 +910,8 @@ const WebRTCRecorder: React.FC<Props> = ({
       pcRef.current.close();
       pcRef.current = null;
     }
+    iceGatheringCleanupRef.current?.();
+    iceGatheringCleanupRef.current = null;
 
     wsRef.current?.close();
     wsRef.current = null;
@@ -1234,6 +927,7 @@ const WebRTCRecorder: React.FC<Props> = ({
     visionEnabledRef.current = false;
     visionBusyRef.current = false;
     pendingIceCandidatesRef.current = [];
+    pendingRemoteIceCandidatesRef.current = [];
 
     updateConnectionDetails({
       signaling: "idle",

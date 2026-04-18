@@ -40,7 +40,6 @@ class Settings(BaseSettings):
         "ws_allowed_origins",
         "cors_allow_methods",
         "cors_allow_headers",
-        "webrtc_ice_servers",
         mode="before",
     )
     @classmethod
@@ -62,6 +61,55 @@ class Settings(BaseSettings):
             return [item.strip() for item in raw.split(",") if item.strip()]
 
         raise TypeError("List-based settings must be a list or string.")
+
+    @field_validator("webrtc_ice_servers", mode="before")
+    @classmethod
+    def _parse_webrtc_ice_servers(cls, value: object) -> object:
+        if value is None:
+            return value
+
+        def normalize_server(item: object) -> dict[str, Any]:
+            if isinstance(item, str):
+                url = item.strip()
+                if not url:
+                    raise ValueError("ICE server URL entries must not be empty.")
+                return {"urls": [url]}
+
+            if not isinstance(item, dict):
+                raise TypeError("ICE server entries must be dictionaries or strings.")
+
+            normalized = dict(item)
+            urls = normalized.get("urls")
+            if isinstance(urls, str):
+                normalized["urls"] = [urls.strip()] if urls.strip() else []
+            elif isinstance(urls, list):
+                normalized["urls"] = [str(url).strip() for url in urls if str(url).strip()]
+            else:
+                raise ValueError("Each ICE server entry must include a urls value.")
+
+            if not normalized["urls"]:
+                raise ValueError("ICE server entries must include at least one URL.")
+
+            return normalized
+
+        if isinstance(value, list):
+            return [normalize_server(item) for item in value]
+
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+
+            if raw.startswith("["):
+                parsed = json.loads(raw)
+                if not isinstance(parsed, list):
+                    raise ValueError("Expected a JSON list for webrtc_ice_servers.")
+                return [normalize_server(item) for item in parsed]
+
+            urls = [item.strip() for item in raw.split(",") if item.strip()]
+            return [{"urls": urls}] if urls else []
+
+        raise TypeError("webrtc_ice_servers must be a list or string.")
 
     @property
     def effective_ws_allowed_origins(self) -> set[str]:

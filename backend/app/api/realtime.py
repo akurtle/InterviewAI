@@ -5,8 +5,15 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
-from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
+from aiortc import (
+    RTCConfiguration,
+    RTCIceCandidate,
+    RTCIceServer,
+    RTCPeerConnection,
+    RTCSessionDescription,
+)
 from aiortc.sdp import candidate_from_sdp
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -42,6 +49,11 @@ class SessionCandidatePayload(CandidatePayload):
     session_id: str
 
 
+class SessionCandidatesPayload(BaseModel):
+    session_id: str
+    candidates: list[CandidatePayload]
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -69,6 +81,44 @@ async def push_session_event(session_id: str, payload: dict[str, object]) -> Non
         await ws.send_text(json.dumps(message))
     except Exception:
         logger.exception("Failed to push session event for %s", session_id)
+
+
+async def push_results_message(
+    session_id: str,
+    payload: dict[str, object],
+    *,
+    queue_if_unavailable: bool = False,
+) -> None:
+    session = sessions.get(session_id)
+    ws = ws_clients.get(session_id)
+    if not ws:
+        if queue_if_unavailable and session:
+            session.pending_results_messages.append(payload)
+        return
+
+    message = {
+        "session_id": session_id,
+        "timestamp": now_iso(),
+        **payload,
+    }
+
+    try:
+        await ws.send_text(json.dumps(message))
+    except Exception:
+        logger.exception("Failed to push results message for %s", session_id)
+        if queue_if_unavailable and session:
+            session.pending_results_messages.append(payload)
+
+
+async def flush_pending_results_messages(session_id: str) -> None:
+    session = sessions.get(session_id)
+    if not session or not session.pending_results_messages:
+        return
+
+    pending = list(session.pending_results_messages)
+    session.pending_results_messages.clear()
+    for payload in pending:
+        await push_results_message(session_id, payload, queue_if_unavailable=False)
 
 
 async def cleanup_session(session_id: str, reason: str) -> None:
@@ -116,6 +166,94 @@ def schedule_disconnect_cleanup(session_id: str) -> None:
             return
 
     session.cleanup_task = asyncio.create_task(delayed_cleanup())
+
+
+def build_candidate_key(payload: dict[str, object]) -> str:
+    return "|".join(
+        [
+            str(payload.get("sdpMid") or ""),
+            str(payload.get("sdpMLineIndex") if payload.get("sdpMLineIndex") is not None else ""),
+            str(payload.get("candidate") or "__end_of_candidates__"),
+            str(payload.get("usernameFragment") or ""),
+        ]
+    )
+
+
+def extract_local_description_candidates(
+    description: RTCSessionDescription | None,
+) -> list[dict[str, object]]:
+    if description is None or not description.sdp:
+        return []
+
+    candidates: list[dict[str, object]] = []
+    current_mid: str | None = None
+    current_mline_index = -1
+
+    for raw_line in description.sdp.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        if line.startswith("m="):
+            current_mline_index += 1
+            current_mid = None
+            continue
+
+        if line.startswith("a=mid:"):
+            current_mid = line[6:]
+            continue
+
+        if line.startswith("a=candidate:"):
+            candidates.append(
+                {
+                    "candidate": line[2:],
+                    "sdpMid": current_mid,
+                    "sdpMLineIndex": current_mline_index if current_mline_index >= 0 else None,
+                    "usernameFragment": None,
+                }
+            )
+            continue
+
+        if line == "a=end-of-candidates":
+            candidates.append(
+                {
+                    "candidate": None,
+                    "sdpMid": current_mid,
+                    "sdpMLineIndex": current_mline_index if current_mline_index >= 0 else None,
+                    "usernameFragment": None,
+                }
+            )
+
+    return candidates
+
+
+def register_initial_answer_candidates(session: WebRTCSession) -> None:
+    for payload in extract_local_description_candidates(session.peer_connection.localDescription):
+        session.announced_local_candidate_keys.add(build_candidate_key(payload))
+    session.initial_answer_candidates_registered = True
+
+
+async def queue_new_local_description_candidates(session_id: str) -> None:
+    session = touch_session(session_id)
+    if not session or not session.initial_answer_candidates_registered:
+        return
+
+    new_payloads: list[dict[str, object]] = []
+    for payload in extract_local_description_candidates(session.peer_connection.localDescription):
+        key = build_candidate_key(payload)
+        if key in session.announced_local_candidate_keys:
+            continue
+
+        session.announced_local_candidate_keys.add(key)
+        new_payloads.append(
+            {
+                "type": "ice_candidate",
+                **payload,
+            }
+        )
+
+    for payload in new_payloads:
+        await push_results_message(session_id, payload, queue_if_unavailable=True)
 
 
 def register_peer_connection(
@@ -173,6 +311,7 @@ def register_peer_connection(
             session_id,
             {"event": "ice_gathering_state", "value": pc.iceGatheringState},
         )
+        await queue_new_local_description_candidates(session_id)
 
     @pc.on("track")
     def on_track(track) -> None:
@@ -201,6 +340,56 @@ def parse_candidate(payload: CandidatePayload) -> RTCIceCandidate | None:
     return candidate
 
 
+async def apply_candidate(
+    session: WebRTCSession,
+    payload: CandidatePayload,
+) -> bool:
+    candidate = parse_candidate(payload)
+    if candidate is None:
+        try:
+            await session.peer_connection.addIceCandidate(None)
+        except TypeError:
+            logger.debug("Ignoring end-of-candidates marker unsupported by aiortc runtime.")
+        return True
+
+    await session.peer_connection.addIceCandidate(candidate)
+    return False
+
+
+def build_rtc_configuration() -> RTCConfiguration | None:
+    raw_servers = settings.webrtc_ice_servers or []
+    if not raw_servers:
+        return None
+
+    ice_servers: list[RTCIceServer] = []
+    for server in raw_servers:
+        if not isinstance(server, dict):
+            continue
+
+        urls = server.get("urls")
+        if isinstance(urls, str):
+            normalized_urls: str | list[str] = urls.strip()
+        elif isinstance(urls, list):
+            normalized_urls = [str(url).strip() for url in urls if str(url).strip()]
+        else:
+            continue
+
+        if not normalized_urls:
+            continue
+
+        kwargs: dict[str, Any] = {"urls": normalized_urls}
+        if server.get("username") is not None:
+            kwargs["username"] = str(server["username"])
+        if server.get("credential") is not None:
+            kwargs["credential"] = str(server["credential"])
+        if server.get("credentialType") is not None:
+            kwargs["credentialType"] = str(server["credentialType"])
+
+        ice_servers.append(RTCIceServer(**kwargs))
+
+    return RTCConfiguration(iceServers=ice_servers) if ice_servers else None
+
+
 @router.get("/webrtc/config")
 async def webrtc_config():
     return {
@@ -213,7 +402,8 @@ async def webrtc_config():
 @router.post("/webrtc/offer")
 async def webrtc_offer(offer: Offer):
     session_id = offer.session_id or str(uuid.uuid4())
-    pc = RTCPeerConnection()
+    rtc_configuration = build_rtc_configuration()
+    pc = RTCPeerConnection(configuration=rtc_configuration) if rtc_configuration else RTCPeerConnection()
     register_peer_connection(
         session_id,
         pc,
@@ -226,7 +416,9 @@ async def webrtc_offer(offer: Offer):
 
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
-    touch_session(session_id)
+    session = touch_session(session_id)
+    if session:
+        register_initial_answer_candidates(session)
 
     return {
         "session_id": session_id,
@@ -241,12 +433,26 @@ async def add_webrtc_candidate(payload: SessionCandidatePayload):
     if not session:
         raise HTTPException(status_code=404, detail="Unknown WebRTC session.")
 
-    candidate = parse_candidate(payload)
-    if candidate is None:
-        return {"status": "ok", "session_id": payload.session_id, "completed": True}
+    completed = await apply_candidate(session, payload)
+    return {"status": "ok", "session_id": payload.session_id, "completed": completed}
 
-    await session.peer_connection.addIceCandidate(candidate)
-    return {"status": "ok", "session_id": payload.session_id}
+
+@router.post("/webrtc/candidates")
+async def add_webrtc_candidates(payload: SessionCandidatesPayload):
+    session = touch_session(payload.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Unknown WebRTC session.")
+
+    completed = False
+    for candidate_payload in payload.candidates:
+        completed = await apply_candidate(session, candidate_payload) or completed
+
+    return {
+        "status": "ok",
+        "session_id": payload.session_id,
+        "count": len(payload.candidates),
+        "completed": completed,
+    }
 
 
 @router.websocket("/asr")
@@ -297,6 +503,7 @@ async def ws_results(ws: WebSocket, session_id: str):
         session_id,
         {"event": "results_socket", "value": "connected"},
     )
+    await flush_pending_results_messages(session_id)
 
     try:
         while True:
