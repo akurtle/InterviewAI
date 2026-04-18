@@ -5,6 +5,7 @@ import json
 import urllib.request
 import urllib.error
 import time
+import re
 
 from app.questions.models import QuestionItem, QuestionRequest
 from app.config import get_settings
@@ -108,32 +109,41 @@ def _detect_role(request: QuestionRequest) -> str:
     return "backend"
 
 
-def generate_questions(request: QuestionRequest) -> Tuple[List[QuestionItem], List[str], List[str]]:
-    warnings: List[str] = []
-    used_inputs: List[str] = []
+def _normalize_question_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().lower())
 
-    call_type = _normalize_call_type(request.call_type)
-    role_key = _detect_role(request)
 
-    used_inputs.append(f"call_type:{call_type}")
-    used_inputs.append(f"role:{role_key}")
+def _filter_new_questions(
+    items: List[QuestionItem],
+    asked_questions: List[str],
+    limit: int,
+) -> List[QuestionItem]:
+    seen = {
+        _normalize_question_text(question)
+        for question in asked_questions
+        if question and question.strip()
+    }
+    results: List[QuestionItem] = []
 
+    for item in items:
+        normalized = _normalize_question_text(item.question)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        results.append(item)
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+def _build_template_questions(
+    request: QuestionRequest,
+    call_type: str,
+    role_key: str,
+    used_inputs: List[str],
+) -> List[QuestionItem]:
     questions: List[QuestionItem] = []
-
-    settings = get_settings()
-    api_key = settings.gemini_api_key
-    if api_key:
-        llm_questions, llm_warnings = _generate_questions_with_gemini(
-            request=request,
-            api_key=api_key,
-            model=settings.gemini_model,
-            api_url=settings.gemini_api_url,
-        )
-        warnings.extend(llm_warnings)
-        if llm_questions:
-            return llm_questions[: request.num_questions], warnings, used_inputs
-    else:
-        warnings.append("GEMINI_API_KEY not set. Falling back to local templates.")
 
     if call_type == "sales":
         for q in SALES_CALL_QUESTIONS:
@@ -158,16 +168,53 @@ def generate_questions(request: QuestionRequest) -> Tuple[List[QuestionItem], Li
             )
         )
 
-    if len(questions) > request.num_questions:
-        questions = questions[: request.num_questions]
-
     if not questions:
-        questions = [
+        return [
             QuestionItem(
                 category="general",
                 question="Tell me about yourself and what you want to improve.",
             )
         ]
+
+    return questions
+
+
+def generate_questions(request: QuestionRequest) -> Tuple[List[QuestionItem], List[str], List[str]]:
+    warnings: List[str] = []
+    used_inputs: List[str] = []
+
+    call_type = _normalize_call_type(request.call_type)
+    role_key = _detect_role(request)
+
+    used_inputs.append(f"call_type:{call_type}")
+    used_inputs.append(f"role:{role_key}")
+    if request.asked_questions:
+        used_inputs.append(f"asked_questions:{len(request.asked_questions)}")
+
+    settings = get_settings()
+    api_key = settings.gemini_api_key
+    if api_key:
+        llm_questions, llm_warnings = _generate_questions_with_gemini(
+            request=request,
+            api_key=api_key,
+            model=settings.gemini_model,
+            api_url=settings.gemini_api_url,
+        )
+        warnings.extend(llm_warnings)
+        if llm_questions:
+            return llm_questions[: request.num_questions], warnings, used_inputs
+    else:
+        warnings.append("GEMINI_API_KEY not set. Falling back to local templates.")
+
+    template_questions = _build_template_questions(request, call_type, role_key, used_inputs)
+    questions = _filter_new_questions(
+        template_questions,
+        request.asked_questions,
+        request.num_questions,
+    )
+
+    if not questions and request.asked_questions:
+        warnings.append("No additional template questions are available for this session.")
 
     return questions, warnings, used_inputs
 
@@ -193,6 +240,8 @@ def _generate_questions_with_gemini(
         "company": request.company,
         "call_type": request.call_type,
         "num_questions": request.num_questions,
+        "asked_questions": request.asked_questions,
+        "instructions": "Return only new questions that are distinct from asked_questions.",
     }
 
     payload = {
@@ -254,7 +303,12 @@ def _generate_questions_with_gemini(
             category = str(item.get("category", "general")).strip() or "general"
             if question:
                 results.append(QuestionItem(category=category, question=question))
-        return results, warnings
+        filtered_results = _filter_new_questions(
+            results,
+            request.asked_questions,
+            request.num_questions,
+        )
+        return filtered_results, warnings
     except Exception:
         warnings.append("Gemini response could not be parsed as JSON.")
         return [], warnings
