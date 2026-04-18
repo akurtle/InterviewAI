@@ -12,6 +12,10 @@ class QuestionRequest(BaseModel):
         description="Type of call (interview, sales, presentation).",
     )
     num_questions: int = Field(10, ge=1, le=30)
+    asked_questions: List[str] = Field(
+        default_factory=list,
+        description="Questions already generated for this session, used to avoid duplicates.",
+    )
 
 
 class QuestionItem(BaseModel):
