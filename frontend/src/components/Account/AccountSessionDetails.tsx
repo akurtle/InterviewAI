@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type {
   StoredInterviewSession,
   StoredInterviewSessionAnswer,
-} from "../../sessionStore";
+} from "../../types/session";
 import AccountFeedbackSection from "./AccountFeedbackSection";
 import {
   buildQuestionAnswerSections,
@@ -11,8 +11,8 @@ import {
   formatDurationSeconds,
   formatFileSize,
   getContextFieldLabels,
-  type FeedbackPayload,
 } from "./accountUtils";
+import type { FeedbackPayload } from "../../types/account";
 
 type Props = {
   detailStatus: "idle" | "loading" | "ready" | "error";
@@ -273,6 +273,69 @@ const AccountSessionDetails = ({
                   <p className="theme-text-secondary mt-2 whitespace-pre-line text-sm leading-7">
                     {section.answer || "No answer was captured for this question."}
                   </p>
+                  {section.answerReview && (
+                    <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="theme-text-dim text-xs uppercase tracking-[0.2em]">
+                            Response Review
+                          </p>
+                          <p className="theme-text-primary mt-2 text-sm font-semibold">
+                            {section.answerReview.summary}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="theme-text-dim text-xs uppercase tracking-[0.18em]">
+                            Score
+                          </p>
+                          <p className="theme-text-primary mt-2 text-lg font-semibold">
+                            {section.answerReview.score.toFixed(1)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-2 md:grid-cols-4">
+                        {Object.entries(section.answerReview.dimension_scores).map(
+                          ([label, value]) => (
+                            <div
+                              key={`${section.key}-${label}`}
+                              className="rounded-xl border border-white/8 bg-black/10 px-3 py-2"
+                            >
+                              <p className="theme-text-dim text-[11px] uppercase tracking-wide">
+                                {label}
+                              </p>
+                              <p className="theme-text-primary mt-1 text-sm font-semibold">
+                                {value.toFixed(1)}
+                              </p>
+                            </div>
+                          )
+                        )}
+                      </div>
+
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="theme-text-dim text-xs uppercase tracking-[0.2em]">
+                            Strengths
+                          </p>
+                          <ul className="theme-text-secondary mt-2 space-y-2 text-sm">
+                            {section.answerReview.strengths.map((item, index) => (
+                              <li key={`${section.key}-strength-${index}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="theme-text-dim text-xs uppercase tracking-[0.2em]">
+                            Improve Next
+                          </p>
+                          <ul className="theme-text-secondary mt-2 space-y-2 text-sm">
+                            {section.answerReview.improvements.map((item, index) => (
+                              <li key={`${section.key}-improve-${index}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {section.transcriptSegments.length > 0 && (
                     <div className="mt-4 space-y-2">
                       <p className="theme-text-dim text-xs uppercase tracking-[0.2em]">

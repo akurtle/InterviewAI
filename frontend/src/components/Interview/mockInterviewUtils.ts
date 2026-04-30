@@ -1,29 +1,15 @@
-import { isCallEnvironmentId, type CallEnvironmentId } from "./callEnvironments";
+import { isCallEnvironmentId } from "./callEnvironments";
 import type {
+  CallEnvironmentId,
+  LiveArticulationStats,
   MediaDeviceCatalog,
   MediaDeviceSelection,
-  RecordMode,
-  StartupMetrics,
   VisionFrame,
-} from "./types";
+} from "../../types/interview";
 
 const MEDIA_SELECTION_STORAGE_KEY = "interview-ai:selected-media-devices";
 const MOUTH_TRACKING_STORAGE_KEY = "interview-ai:mouth-tracking-enabled";
 const CALL_ENVIRONMENT_STORAGE_KEY = "interview-ai:call-environment";
-
-export type ActiveQuestion = {
-  text: string;
-  index: number;
-  total: number;
-};
-
-export type LiveArticulationStats = {
-  mouthOpenRatio: number | null;
-  articulationRate: number | null;
-  mouthMovement: number | null;
-  statusText: string;
-  toneClassName: string;
-};
 
 const parseTimestampSeconds = (value: unknown): number => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -62,21 +48,6 @@ const parseOptionalNumber = (value: unknown): number | null => {
   }
   return null;
 };
-
-export const createEmptyStartupMetrics = (): StartupMetrics => ({
-  session_started_at_ms: null,
-  media_stream_ready_ms: null,
-  offer_created_ms: null,
-  ice_gathering_complete_ms: null,
-  results_socket_ready_ms: null,
-  signaling_response_ms: null,
-  remote_description_ready_ms: null,
-  ice_connected_ms: null,
-  webrtc_connected_ms: null,
-  asr_socket_ready_ms: null,
-  asr_recording_ready_ms: null,
-  session_ready_ms: null,
-});
 
 export const createEmptyMediaDeviceCatalog = (): MediaDeviceCatalog => ({
   audioInputs: [],
@@ -147,25 +118,6 @@ export const buildDeviceLabel = (device: MediaDeviceInfo, index: number) => {
   return device.kind === "audioinput" ? `Microphone ${index + 1}` : `Camera ${index + 1}`;
 };
 
-export const computeSessionReadyMs = (metrics: StartupMetrics, mode: RecordMode) => {
-  if (mode === "audio") {
-    return metrics.asr_recording_ready_ms;
-  }
-
-  if (mode === "video") {
-    return metrics.webrtc_connected_ms;
-  }
-
-  if (
-    typeof metrics.webrtc_connected_ms === "number" &&
-    typeof metrics.asr_recording_ready_ms === "number"
-  ) {
-    return Math.max(metrics.webrtc_connected_ms, metrics.asr_recording_ready_ms);
-  }
-
-  return null;
-};
-
 export const formatPercent = (value: number | null) => {
   if (value === null) return "N/A";
   return `${Math.round(value * 100)}%`;
@@ -174,54 +126,73 @@ export const formatPercent = (value: number | null) => {
 export const normalizeVisionFrame = (data: unknown): VisionFrame | null => {
   if (!data) return null;
 
-  const source = data as any;
+  const source = data as {
+    frame?: unknown;
+    payload?: unknown;
+    data?: unknown;
+  };
   const frame =
     source.frame ??
-    source.payload?.frame ??
-    source.data?.frame ??
+    (typeof source.payload === "object" && source.payload !== null && "frame" in source.payload
+      ? (source.payload as { frame?: unknown }).frame
+      : undefined) ??
+    (typeof source.data === "object" && source.data !== null && "frame" in source.data
+      ? (source.data as { frame?: unknown }).frame
+      : undefined) ??
     source.payload ??
     source.data ??
     source;
 
+  if (typeof frame !== "object" || frame === null) {
+    return null;
+  }
+
+  const frameData = frame as Record<string, unknown>;
+
   const facePresent =
-    parseOptionalBoolean(frame.face_present ?? frame.facePresent) ??
+    parseOptionalBoolean(frameData.face_present ?? frameData.facePresent) ??
     [
-      frame.looking_at_camera,
-      frame.lookingAtCamera,
-      frame.smile_prob,
-      frame.smileProb,
-      frame.head_yaw,
-      frame.headYaw,
-      frame.head_pitch,
-      frame.headPitch,
-      frame.mouth_open_ratio,
-      frame.mouthOpenRatio,
-      frame.mouth_movement_delta,
-      frame.mouthMovementDelta,
-      frame.articulation_active,
-      frame.articulationActive,
+      frameData.looking_at_camera,
+      frameData.lookingAtCamera,
+      frameData.smile_prob,
+      frameData.smileProb,
+      frameData.head_yaw,
+      frameData.headYaw,
+      frameData.head_pitch,
+      frameData.headPitch,
+      frameData.mouth_open_ratio,
+      frameData.mouthOpenRatio,
+      frameData.mouth_movement_delta,
+      frameData.mouthMovementDelta,
+      frameData.articulation_active,
+      frameData.articulationActive,
     ].some((value) => value !== undefined && value !== null);
 
-  if (!facePresent && parseOptionalBoolean(frame.face_present ?? frame.facePresent) === null) {
+  if (
+    !facePresent &&
+    parseOptionalBoolean(frameData.face_present ?? frameData.facePresent) === null
+  ) {
     return null;
   }
 
   const lookingAtCamera =
-    parseOptionalBoolean(frame.looking_at_camera ?? frame.lookingAtCamera) ?? false;
+    parseOptionalBoolean(frameData.looking_at_camera ?? frameData.lookingAtCamera) ?? false;
 
   return {
-    timestamp: parseTimestampSeconds(frame.timestamp),
+    timestamp: parseTimestampSeconds(frameData.timestamp),
     face_present: facePresent,
     looking_at_camera: facePresent ? lookingAtCamera : false,
-    smile_prob: parseOptionalNumber(frame.smile_prob ?? frame.smileProb),
-    head_yaw: parseOptionalNumber(frame.head_yaw ?? frame.headYaw),
-    head_pitch: parseOptionalNumber(frame.head_pitch ?? frame.headPitch),
-    mouth_open_ratio: parseOptionalNumber(frame.mouth_open_ratio ?? frame.mouthOpenRatio),
+    smile_prob: parseOptionalNumber(frameData.smile_prob ?? frameData.smileProb),
+    head_yaw: parseOptionalNumber(frameData.head_yaw ?? frameData.headYaw),
+    head_pitch: parseOptionalNumber(frameData.head_pitch ?? frameData.headPitch),
+    mouth_open_ratio: parseOptionalNumber(
+      frameData.mouth_open_ratio ?? frameData.mouthOpenRatio
+    ),
     mouth_movement_delta: parseOptionalNumber(
-      frame.mouth_movement_delta ?? frame.mouthMovementDelta
+      frameData.mouth_movement_delta ?? frameData.mouthMovementDelta
     ),
     articulation_active: parseOptionalBoolean(
-      frame.articulation_active ?? frame.articulationActive
+      frameData.articulation_active ?? frameData.articulationActive
     ),
   };
 };

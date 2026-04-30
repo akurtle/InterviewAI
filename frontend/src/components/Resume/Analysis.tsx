@@ -1,5 +1,5 @@
 import React, { type SetStateAction } from 'react'
-import type { ParseResponse, StepType } from '../../pages/GetStarted';
+import type { GetStartedOption, ParseResponse, StepType } from '../../types/resume';
 
 
 
@@ -10,7 +10,7 @@ interface AnalysisProps {
   setCurrentStep: React.Dispatch<SetStateAction<StepType>>
   setAnalysisError: (value: string | null) => void;
   setAnalysisResult: (value: ParseResponse | null) => void;
-  setSelectedOption: React.Dispatch<SetStateAction<"interview" | "resume" | null>>;
+  setSelectedOption: React.Dispatch<SetStateAction<GetStartedOption | null>>;
   setUploadedFile: (value: File | null) => void;
 }
 

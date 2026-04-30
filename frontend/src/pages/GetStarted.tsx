@@ -7,19 +7,12 @@ import Upload from '../components/Resume/Upload';
 import Analysis from '../components/Resume/Analysis';
 import FeaturesMiniSection from '../components/Resume/FeaturesMiniSection';
 import { fetchWithLoopbackFallback, getApiBase } from '../network';
-
-export type StepType = 'choose' | 'upload' | 'analyze';
-
-export interface ParseResponse {
-  success: boolean;
-  filename: string;
-  data: Record<string, any>;
-}
+import type { GetStartedOption, ParseResponse, StepType } from '../types/resume';
 
 const GetStarted: React.FC = () => {
   const API_BASE = getApiBase();
   const [currentStep, setCurrentStep] = useState<StepType>('choose');
-  const [selectedOption, setSelectedOption] = useState<'interview' | 'resume' | null>(null);
+  const [selectedOption, setSelectedOption] = useState<GetStartedOption | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedFilePath, setUploadedFilePath] = useState<string | Blob>("");
   const [analysisResult, setAnalysisResult] = useState<ParseResponse | null>(null);
@@ -36,7 +29,7 @@ const GetStarted: React.FC = () => {
     }
   };
 
-  const handleOptionSelect = (option: 'interview' | 'resume') => {
+  const handleOptionSelect = (option: GetStartedOption) => {
     setSelectedOption(option);
     setCurrentStep('upload');
   };

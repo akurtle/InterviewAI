@@ -1,6 +1,5 @@
-import { CALL_ENVIRONMENT_OPTIONS, CALL_ENVIRONMENT_PRESETS, type CallEnvironmentId } from "./callEnvironments";
-import type { ActiveQuestion } from "./mockInterviewUtils";
-import type { SessionType } from "../../hooks/useSessionType";
+import { CALL_ENVIRONMENT_OPTIONS, CALL_ENVIRONMENT_PRESETS } from "./callEnvironments";
+import type { ActiveQuestion, CallEnvironmentId, SessionType } from "../../types/interview";
 
 type Props = {
   activeQuestion: ActiveQuestion | null;
@@ -80,11 +79,7 @@ const MockInterviewHeader = ({
                 <span className="theme-chip rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]">
                   {sessionType === "pitch" ? "Pitch mode" : "Interview mode"}
                 </span>
-                <span
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${selectedEnvironment.accentClassName}`}
-                >
-                  UI only simulator
-                </span>
+
               </div>
               <h1 className="theme-text-primary text-2xl font-semibold">Room simulator</h1>
             </div>

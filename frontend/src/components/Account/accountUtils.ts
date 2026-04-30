@@ -1,29 +1,8 @@
 import type {
   StoredInterviewSession,
   StoredInterviewSessionAnswer,
-} from "../../sessionStore";
-
-export type FeedbackPayload = {
-  score?: number | null;
-  feedback?: string[];
-  warnings?: string[];
-  metrics?: Record<string, unknown>;
-} | null;
-
-export type AccountAnswerSection = {
-  key: string;
-  label: string;
-  question: string;
-  rationale: string | null;
-  answer: string;
-  timing: string;
-  transcriptSegments: Array<{ text: string }>;
-};
-
-export type AccountTranscriptReview = {
-  approximate: boolean;
-  sections: AccountAnswerSection[];
-};
+} from "../../types/session";
+import type { AccountTranscriptReview } from "../../types/account";
 
 export const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(undefined, {
@@ -210,6 +189,7 @@ export const buildQuestionAnswerSections = (
               answer.answer_duration_seconds
             ),
             transcriptSegments: answer.transcript_segments ?? [],
+            answerReview: null,
           }))
         : blocks.map((answer, index) => ({
             key: `answer-${index}`,
@@ -219,6 +199,7 @@ export const buildQuestionAnswerSections = (
             answer,
             timing: "",
             transcriptSegments: [],
+            answerReview: null,
           })),
     };
   }
@@ -243,6 +224,7 @@ export const buildQuestionAnswerSections = (
               )
             : "",
           transcriptSegments: answer?.transcript_segments ?? question.transcript_segments ?? [],
+          answerReview: question.answer_review ?? null,
         };
       }),
     };
@@ -273,6 +255,7 @@ export const buildQuestionAnswerSections = (
         question.answer_duration_seconds ?? null
       ),
       transcriptSegments: question.transcript_segments ?? [],
+      answerReview: question.answer_review ?? null,
     };
   });
 

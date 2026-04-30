@@ -71,7 +71,6 @@ const MockInterview = () => {
                   onVisionData={controller.handleVisionData}
                   onRecordingReady={controller.handleRecordingReady}
                   onStreamReady={controller.setSharedMediaStream}
-                  onStartupMetric={controller.markStartupMetric}
                 />
               )}
 
@@ -130,7 +129,6 @@ const MockInterview = () => {
           isSessionLocked={controller.isSessionLocked}
           connectionStatus={controller.connectionStatus}
           visionData={controller.visionData}
-          startupMetrics={controller.startupMetrics}
         />
 
         <MockInterviewInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} />

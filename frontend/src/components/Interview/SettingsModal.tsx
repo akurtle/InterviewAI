@@ -1,14 +1,11 @@
 import ThemePicker from "../Settings/ThemePicker";
-import {
-  CALL_ENVIRONMENT_OPTIONS,
-  type CallEnvironmentId,
-} from "./callEnvironments";
+import { CALL_ENVIRONMENT_OPTIONS } from "./callEnvironments";
 import type {
+  CallEnvironmentId,
   MediaDeviceCatalog,
   MediaDeviceSelection,
   RecordMode,
-  StartupMetrics,
-} from "./types";
+} from "../../types/interview";
 
 type SettingsModalProps = {
   isOpen: boolean;
@@ -29,26 +26,8 @@ type SettingsModalProps = {
   mediaDeviceLabelsAvailable: boolean;
   isSessionLocked: boolean;
   connectionStatus: string;
-  visionData: any;
-  startupMetrics: StartupMetrics;
+  visionData: unknown;
 };
-
-const formatMetricMs = (value: number | null) =>
-  typeof value === "number" && Number.isFinite(value) ? `${value} ms` : "Pending";
-
-const startupMetricLabels: Array<{ key: keyof StartupMetrics; label: string }> = [
-  { key: "media_stream_ready_ms", label: "Media stream ready" },
-  { key: "offer_created_ms", label: "Offer created" },
-  { key: "ice_gathering_complete_ms", label: "ICE gathering complete" },
-  { key: "results_socket_ready_ms", label: "Results socket ready" },
-  { key: "signaling_response_ms", label: "Signaling response" },
-  { key: "remote_description_ready_ms", label: "Remote description set" },
-  { key: "ice_connected_ms", label: "ICE connected" },
-  { key: "webrtc_connected_ms", label: "WebRTC connected" },
-  { key: "asr_socket_ready_ms", label: "ASR socket ready" },
-  { key: "asr_recording_ready_ms", label: "ASR recording started" },
-  { key: "session_ready_ms", label: "Session ready" },
-];
 
 export default function SettingsModal({
   isOpen,
@@ -70,9 +49,9 @@ export default function SettingsModal({
   isSessionLocked,
   connectionStatus,
   visionData,
-  startupMetrics,
 }: SettingsModalProps) {
   if (!isOpen) return null;
+  const hasVisionData = visionData !== null && visionData !== undefined;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -333,34 +312,6 @@ export default function SettingsModal({
           </div>
         </div>
 
-        <div className="theme-panel-soft mb-6 rounded-lg p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <p className="theme-text-primary text-sm font-semibold">Startup metrics</p>
-              <p className="theme-text-muted mt-1 text-xs">
-                Live timings for stream, signaling, WebRTC, and ASR startup.
-              </p>
-            </div>
-            <span className="theme-chip rounded border px-2 py-1 text-xs">
-              {formatMetricMs(startupMetrics.session_ready_ms)}
-            </span>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            {startupMetricLabels.map((metric) => (
-              <div
-                key={metric.key}
-                className="theme-panel rounded-lg px-3 py-2"
-              >
-                <p className="theme-text-dim text-xs uppercase tracking-wide">{metric.label}</p>
-                <p className="theme-text-primary mt-1 text-sm font-semibold">
-                  {formatMetricMs(startupMetrics[metric.key])}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div className="mb-6">
           <h3 className="theme-text-primary mb-3 flex items-center gap-2 font-semibold">
             <svg className="theme-accent-text h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -387,7 +338,7 @@ export default function SettingsModal({
           </ul>
         </div>
 
-        {visionData && (
+        {hasVisionData && (
           <div className="theme-border mt-4 border-t pt-4">
             <h3 className="theme-text-primary mb-3 flex items-center gap-2 font-semibold">
               <svg className="theme-accent-text h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

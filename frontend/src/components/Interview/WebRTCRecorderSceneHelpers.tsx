@@ -1,7 +1,5 @@
 import type { ReactElement, RefObject } from "react";
-import type { SessionType } from "../../hooks/useSessionType";
-
-export type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
+import type { ConnectionStatus, SessionType } from "../../types/interview";
 
 export const formatCallClock = (elapsedMs: number): string => {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));

@@ -5,10 +5,12 @@ import {
   getInterviewSessionRecordingUrl,
   listInterviewSessionAnswers,
   listInterviewSessions,
-  type StoredInterviewSession,
-  type StoredInterviewSessionAnswer,
-  type StoredInterviewSessionSummary,
 } from "../sessionStore";
+import type {
+  StoredInterviewSession,
+  StoredInterviewSessionAnswer,
+  StoredInterviewSessionSummary,
+} from "../types/session";
 
 type Status = "loading" | "ready" | "error";
 type DetailStatus = "idle" | "loading" | "ready" | "error";

@@ -2,8 +2,8 @@ import {
   formatLabel,
   formatMetricValue,
   formatScore,
-  type FeedbackPayload,
 } from "./accountUtils";
+import type { FeedbackPayload } from "../../types/account";
 
 type Props = {
   title: string;

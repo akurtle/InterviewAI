@@ -1,5 +1,50 @@
+export type SessionType = "interview" | "pitch";
+
 export type RecordMode = "video" | "audio" | "both";
 export type FeedbackStatus = "idle" | "loading" | "ready" | "error";
+export type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
+
+export type CallEnvironmentId =
+  | "teams"
+  | "meet"
+  | "audience"
+  | "webinar"
+  | "studio";
+
+export type CallEnvironmentPreset = {
+  id: CallEnvironmentId;
+  label: string;
+  shortLabel: string;
+  description: string;
+  helperText: string;
+  stageLayout: "platform" | "audience";
+  stageHeading: string;
+  stageSubheading: string;
+  idleTitle: string;
+  idleBody: string;
+  accentClassName: string;
+  shellClassName: string;
+  frameClassName: string;
+  controlClassName: string;
+};
+
+export type QuestionResponseReview = {
+  index: number;
+  question: string;
+  category?: string | null;
+  answer_text: string;
+  score: number;
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  metrics: Record<string, unknown>;
+  dimension_scores: {
+    relevance: number;
+    completeness: number;
+    specificity: number;
+    structure: number;
+  };
+};
 
 export type GeneratedQuestion = {
   category?: string | null;
@@ -10,6 +55,7 @@ export type GeneratedQuestion = {
   answer_ended_at?: string | null;
   answer_duration_seconds?: number | null;
   transcript_segments?: TranscriptItem[] | null;
+  answer_review?: QuestionResponseReview | null;
 };
 
 export type TranscriptItem = {
@@ -25,6 +71,7 @@ export type QuestionAnswerReview = {
   endedAtMs: number | null;
   durationSeconds: number | null;
   transcriptSegments: TranscriptItem[];
+  evaluation?: QuestionResponseReview | null;
 };
 
 export type VisionFrame = {
@@ -61,18 +108,16 @@ export type MediaDeviceSelection = {
   videoInputId: string;
 };
 
-export type StartupMetricKey =
-  | "session_started_at_ms"
-  | "media_stream_ready_ms"
-  | "offer_created_ms"
-  | "ice_gathering_complete_ms"
-  | "results_socket_ready_ms"
-  | "signaling_response_ms"
-  | "remote_description_ready_ms"
-  | "ice_connected_ms"
-  | "webrtc_connected_ms"
-  | "asr_socket_ready_ms"
-  | "asr_recording_ready_ms"
-  | "session_ready_ms";
+export type ActiveQuestion = {
+  text: string;
+  index: number;
+  total: number;
+};
 
-export type StartupMetrics = Record<StartupMetricKey, number | null>;
+export type LiveArticulationStats = {
+  mouthOpenRatio: number | null;
+  articulationRate: number | null;
+  mouthMovement: number | null;
+  statusText: string;
+  toneClassName: string;
+};

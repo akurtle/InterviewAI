@@ -1,4 +1,5 @@
-import { formatPercent, type LiveArticulationStats } from "./mockInterviewUtils";
+import { formatPercent } from "./mockInterviewUtils";
+import type { LiveArticulationStats } from "../../types/interview";
 
 type Props = {
   stats: LiveArticulationStats;

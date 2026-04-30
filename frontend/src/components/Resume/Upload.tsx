@@ -1,11 +1,11 @@
 import React, { type Dispatch, type SetStateAction } from 'react'
-import type { StepType } from '../../pages/GetStarted';
+import type { GetStartedOption, StepType } from '../../types/resume';
 
 interface UploadProps {
-  selectedOption: string | null;
+  selectedOption: GetStartedOption | null;
   uploadedFile: File | null;
   setCurrentStep: Dispatch<SetStateAction<StepType>>
-  setSelectedOption: Dispatch<SetStateAction<"interview" | "resume" | null>>
+  setSelectedOption: Dispatch<SetStateAction<GetStartedOption | null>>
   setUploadedFile: (file: File | null) => void;
   uploadedFilePath: string | Blob;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;

@@ -2,22 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth";
 import { useWhisperWS } from "../components/Interview/useWhisper";
 import type {
+  ActiveQuestion,
+  CallEnvironmentId,
   GeneratedQuestion,
   MediaDeviceCatalog,
   MediaDeviceSelection,
+  QuestionResponseReview,
   QuestionAnswerReview,
   RecordMode,
   SessionRecording,
-  StartupMetricKey,
-  StartupMetrics,
   TranscriptItem,
   VisionFrame,
-} from "../components/Interview/types";
+} from "../types/interview";
 import {
   buildDeviceLabel,
-  computeSessionReadyMs,
   createEmptyMediaDeviceCatalog,
-  createEmptyStartupMetrics,
   getLiveArticulationStats,
   normalizeVisionFrame,
   persistCallEnvironment,
@@ -26,13 +25,12 @@ import {
   readStoredCallEnvironment,
   readStoredMediaSelection,
   readStoredMouthTrackingEnabled,
-  type ActiveQuestion,
 } from "../components/Interview/mockInterviewUtils";
-import type { CallEnvironmentId } from "../components/Interview/callEnvironments";
 import { useFeedbackRequests } from "./useFeedbackRequests";
 import { useSessionType } from "./useSessionType";
 import { getApiBase, getWsBase } from "../network";
-import { saveInterviewSession, type SessionQuestionContext } from "../sessionStore";
+import { saveInterviewSession } from "../sessionStore";
+import type { SessionQuestionContext } from "../types/session";
 
 type SessionSaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -41,7 +39,7 @@ export const useMockInterviewController = () => {
   const [connectionStatus, setConnectionStatus] = useState<string>("idle");
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [interviewStartSignal, setInterviewStartSignal] = useState(0);
-  const [visionData, setVisionData] = useState<any>(null);
+  const [visionData, setVisionData] = useState<unknown>(null);
   const [visionFrames, setVisionFrames] = useState<VisionFrame[]>([]);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
   const [questionAnswers, setQuestionAnswers] = useState<QuestionAnswerReview[]>([]);
@@ -53,7 +51,6 @@ export const useMockInterviewController = () => {
   const [sessionSaveStatus, setSessionSaveStatus] = useState<SessionSaveStatus>("idle");
   const [sessionSaveMessage, setSessionSaveMessage] = useState<string | null>(null);
   const [sharedMediaStream, setSharedMediaStream] = useState<MediaStream | null>(null);
-  const [startupMetrics, setStartupMetrics] = useState<StartupMetrics>(createEmptyStartupMetrics);
   const [mediaDevices, setMediaDevices] = useState<MediaDeviceCatalog>(createEmptyMediaDeviceCatalog);
   const [mediaSelection, setMediaSelection] = useState<MediaDeviceSelection>(readStoredMediaSelection);
   const [mouthTrackingEnabled, setMouthTrackingEnabled] = useState<boolean>(
@@ -80,30 +77,6 @@ export const useMockInterviewController = () => {
     setTranscripts((prev) => [...prev, { text, isFinal, ts: Date.now() }]);
   }, []);
 
-  const markStartupMetric = useCallback(
-    (metric: StartupMetricKey) => {
-      const startedAt = sessionStartedAtRef.current;
-      if (startedAt == null) return;
-
-      setStartupMetrics((prev) => {
-        if (prev[metric] !== null) {
-          return prev;
-        }
-
-        const next = {
-          ...prev,
-          [metric]: metric === "session_started_at_ms" ? 0 : Date.now() - startedAt,
-        } as StartupMetrics;
-
-        return {
-          ...next,
-          session_ready_ms: computeSessionReadyMs(next, recordMode),
-        };
-      });
-    },
-    [recordMode]
-  );
-
   const {
     start: startAudio,
     stop: stopAudio,
@@ -111,7 +84,6 @@ export const useMockInterviewController = () => {
     status: audioStatus,
   } = useWhisperWS(`${wsBase}/asr`, {
     onTranscript: handleTranscript,
-    onStartupMetric: markStartupMetric,
   });
 
   const {
@@ -126,6 +98,8 @@ export const useMockInterviewController = () => {
     apiBase,
     speechEndpoint: endpoints.speech,
     videoEndpoint: endpoints.video,
+    generatedQuestions,
+    questionAnswers,
     transcripts,
     visionFrames,
   });
@@ -236,19 +210,20 @@ export const useMockInterviewController = () => {
     persistedSessionKeyRef.current = "";
     sessionRecordingRef.current = null;
     setSharedMediaStream(null);
-    setStartupMetrics({
-      ...createEmptyStartupMetrics(),
-      session_started_at_ms: 0,
-    });
     setSessionSaveStatus("idle");
     setSessionSaveMessage(null);
     markSessionStart();
     setInterviewStartSignal((prev) => prev + 1);
   }, [markSessionStart]);
 
-  const handleVisionData = useCallback((data: any) => {
+  const handleVisionData = useCallback((data: unknown) => {
     console.log("Vision data:", data);
-    if (data?.type !== "frame") {
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "type" in data &&
+      data.type !== "frame"
+    ) {
       setVisionData(data);
     }
 
@@ -342,6 +317,16 @@ export const useMockInterviewController = () => {
 
     try {
       const answersByIndex = new Map(questionAnswers.map((answer) => [answer.index, answer]));
+      const speechQuestionReviews = Array.isArray(
+        (effectiveFeedbackResult.speechFeedback as { question_reviews?: unknown } | null)
+          ?.question_reviews
+      )
+        ? ((effectiveFeedbackResult.speechFeedback as { question_reviews: QuestionResponseReview[] })
+            .question_reviews ?? [])
+        : [];
+      const reviewsByIndex = new Map(
+        speechQuestionReviews.map((review) => [review.index, review] as const)
+      );
 
       const result = await saveInterviewSession({
         userId: user.id,
@@ -359,6 +344,7 @@ export const useMockInterviewController = () => {
             : null,
           answer_duration_seconds: answersByIndex.get(index)?.durationSeconds ?? null,
           transcript_segments: answersByIndex.get(index)?.transcriptSegments ?? [],
+          answer_review: reviewsByIndex.get(index) ?? null,
         })),
         answers: questionAnswers,
         transcripts: effectiveFeedbackResult.sessionTranscripts,
@@ -586,13 +572,11 @@ export const useMockInterviewController = () => {
     setSharedMediaStream,
     speechFeedback,
     speechFeedbackStatus,
-    startupMetrics,
     transcripts,
     user,
     videoFeedback,
     videoFeedbackStatus,
     visionData,
     visionFrames,
-    markStartupMetric,
   };
 };

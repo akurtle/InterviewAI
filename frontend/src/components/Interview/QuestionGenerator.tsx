@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithLoopbackFallback, getApiBase } from "../../network";
-import type { GeneratedQuestion, QuestionAnswerReview } from "./types";
-
-type SessionType = "interview" | "pitch";
+import type { GeneratedQuestion, QuestionAnswerReview, SessionType } from "../../types/interview";
 
 type QuestionGeneratorProps = {
   apiBase?: string;

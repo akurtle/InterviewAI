@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
-
-export type SessionType = "interview" | "pitch";
+import type { SessionType } from "../types/interview";
 
 type EndpointConfig = {
   questions: string;

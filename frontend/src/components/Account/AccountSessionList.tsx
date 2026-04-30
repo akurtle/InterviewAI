@@ -1,4 +1,4 @@
-import type { StoredInterviewSessionSummary } from "../../sessionStore";
+import type { StoredInterviewSessionSummary } from "../../types/session";
 import {
   formatDateTime,
   formatDuration,

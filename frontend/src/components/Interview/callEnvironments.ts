@@ -1,26 +1,4 @@
-export type CallEnvironmentId =
-  | "teams"
-  | "meet"
-  | "audience"
-  | "webinar"
-  | "studio";
-
-export type CallEnvironmentPreset = {
-  id: CallEnvironmentId;
-  label: string;
-  shortLabel: string;
-  description: string;
-  helperText: string;
-  stageLayout: "platform" | "audience";
-  stageHeading: string;
-  stageSubheading: string;
-  idleTitle: string;
-  idleBody: string;
-  accentClassName: string;
-  shellClassName: string;
-  frameClassName: string;
-  controlClassName: string;
-};
+import type { CallEnvironmentId, CallEnvironmentPreset } from "../../types/interview";
 
 export const CALL_ENVIRONMENT_PRESETS: Record<
   CallEnvironmentId,

@@ -1,4 +1,4 @@
-import type { FeedbackStatus } from "./types";
+import type { FeedbackStatus, QuestionResponseReview } from "../../types/interview";
 
 type FeedbackPanelProps = {
   speechFeedback: any;
@@ -74,6 +74,18 @@ export default function FeedbackPanel({
     speechFeedback && typeof speechFeedback === "object" ? speechFeedback.metrics ?? null : null;
   const speechWarnings = Array.isArray(speechFeedback?.warnings) ? speechFeedback.warnings : [];
   const speechNotes = Array.isArray(speechFeedback?.feedback) ? speechFeedback.feedback : [];
+  const responseScore =
+    typeof speechFeedback?.response_score === "number" ? speechFeedback.response_score : null;
+  const responseMetrics =
+    speechFeedback && typeof speechFeedback === "object"
+      ? speechFeedback.response_metrics ?? null
+      : null;
+  const responseNotes = Array.isArray(speechFeedback?.response_feedback)
+    ? speechFeedback.response_feedback
+    : [];
+  const questionReviews = Array.isArray(speechFeedback?.question_reviews)
+    ? (speechFeedback.question_reviews as QuestionResponseReview[])
+    : [];
 
   const videoFeedbackScore =
     typeof videoFeedback?.score === "number" ? videoFeedback.score : null;
@@ -278,6 +290,126 @@ export default function FeedbackPanel({
           )}
         </div>
       </div>
+
+      {questionReviews.length > 0 && (
+        <div className="theme-panel-soft mt-4 rounded-lg p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="theme-text-primary text-sm font-semibold">Response quality</h3>
+              <p className="theme-text-muted text-xs">Question-by-question text review</p>
+            </div>
+            <div className="text-right">
+              <p className="theme-text-muted text-xs">Overall response score</p>
+              <p className="theme-text-primary text-xl font-semibold">
+                {responseScore !== null ? responseScore.toFixed(1) : "N/A"}
+              </p>
+            </div>
+          </div>
+
+          {responseNotes.length > 0 && (
+            <div className="mb-4 space-y-2">
+              <p className="theme-text-dim text-xs uppercase tracking-wide">Overall notes</p>
+              <ul className="theme-text-secondary space-y-2 text-sm">
+                {responseNotes.map((note: string, index: number) => (
+                  <li key={`${index}-${note.slice(0, 12)}`} className="flex gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                    <span>{note}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {responseMetrics && (
+            <div className="mb-4 grid gap-2 sm:grid-cols-3">
+              <div className="theme-panel-strong rounded-lg px-3 py-2">
+                <p className="theme-text-muted text-xs">Reviewed questions</p>
+                <p className="theme-text-primary text-sm font-semibold">
+                  {typeof responseMetrics.reviewed_questions === "number"
+                    ? responseMetrics.reviewed_questions
+                    : "N/A"}
+                </p>
+              </div>
+              <div className="theme-panel-strong rounded-lg px-3 py-2">
+                <p className="theme-text-muted text-xs">Avg answer length</p>
+                <p className="theme-text-primary text-sm font-semibold">
+                  {typeof responseMetrics.avg_answer_word_count === "number"
+                    ? `${responseMetrics.avg_answer_word_count.toFixed(1)} words`
+                    : "N/A"}
+                </p>
+              </div>
+              <div className="theme-panel-strong rounded-lg px-3 py-2">
+                <p className="theme-text-muted text-xs">Score consistency</p>
+                <p className="theme-text-primary text-sm font-semibold">
+                  {typeof responseMetrics.score_stddev === "number"
+                    ? responseMetrics.score_stddev.toFixed(1)
+                    : "N/A"}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {questionReviews.map((review) => (
+              <div key={`review-${review.index}`} className="theme-panel-strong rounded-lg p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="theme-text-dim text-xs uppercase tracking-wide">
+                      Question {review.index + 1}
+                    </p>
+                    <p className="theme-text-primary mt-1 text-sm font-semibold">
+                      {review.question}
+                    </p>
+                    <p className="theme-text-muted mt-2 text-sm">{review.summary}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="theme-text-muted text-xs">Score</p>
+                    <p className="theme-text-primary text-lg font-semibold">
+                      {review.score.toFixed(1)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-2 md:grid-cols-4">
+                  {Object.entries(review.dimension_scores).map(([key, value]) => (
+                    <div key={key} className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                      <p className="theme-text-dim text-[11px] uppercase tracking-wide">
+                        {key.replace(/_/g, " ")}
+                      </p>
+                      <p className="theme-text-primary text-sm font-semibold">{value.toFixed(1)}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="theme-text-dim text-xs uppercase tracking-wide">Strengths</p>
+                    <ul className="theme-text-secondary mt-2 space-y-2 text-sm">
+                      {review.strengths.map((item, index) => (
+                        <li key={`${review.index}-strength-${index}`} className="flex gap-2">
+                          <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="theme-text-dim text-xs uppercase tracking-wide">Improve next</p>
+                    <ul className="theme-text-secondary mt-2 space-y-2 text-sm">
+                      {review.improvements.map((item, index) => (
+                        <li key={`${review.index}-improve-${index}`} className="flex gap-2">
+                          <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-300" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

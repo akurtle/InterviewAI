@@ -1,13 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FeedbackStatus, TranscriptItem, VisionFrame } from "../components/Interview/types";
+import type {
+  FeedbackStatus,
+  GeneratedQuestion,
+  QuestionAnswerReview,
+  TranscriptItem,
+  VisionFrame,
+} from "../types/interview";
 import { fetchWithLoopbackFallback } from "../network";
 
 type FeedbackHookArgs = {
   apiBase: string;
   speechEndpoint: string;
   videoEndpoint: string;
+  generatedQuestions: GeneratedQuestion[];
+  questionAnswers: QuestionAnswerReview[];
   transcripts: TranscriptItem[];
   visionFrames: VisionFrame[];
+};
+
+type QuestionResponsePayload = {
+  index: number;
+  question: string;
+  category: string | null;
+  answer_text: string;
 };
 
 export type FeedbackRequestResult = {
@@ -24,6 +39,8 @@ export const useFeedbackRequests = ({
   apiBase,
   speechEndpoint,
   videoEndpoint,
+  generatedQuestions,
+  questionAnswers,
   transcripts,
   visionFrames,
 }: FeedbackHookArgs) => {
@@ -36,8 +53,18 @@ export const useFeedbackRequests = ({
   const sessionStartRef = useRef({ transcriptIndex: 0, visionIndex: 0 });
   const lastSpeechSentRef = useRef<string>("");
   const lastVideoSentRef = useRef<number>(0);
+  const generatedQuestionsRef = useRef(generatedQuestions);
+  const questionAnswersRef = useRef(questionAnswers);
   const transcriptsRef = useRef(transcripts);
   const visionFramesRef = useRef(visionFrames);
+
+  useEffect(() => {
+    generatedQuestionsRef.current = generatedQuestions;
+  }, [generatedQuestions]);
+
+  useEffect(() => {
+    questionAnswersRef.current = questionAnswers;
+  }, [questionAnswers]);
 
   useEffect(() => {
     transcriptsRef.current = transcripts;
@@ -60,7 +87,11 @@ export const useFeedbackRequests = ({
   }, []);
 
   const requestSpeechFeedback = useCallback(
-    async (text: string, speechKey: string) => {
+    async (
+      text: string,
+      speechKey: string,
+      questionResponses: QuestionResponsePayload[]
+    ) => {
       setSpeechFeedbackStatus("loading");
       setFeedbackError(null);
 
@@ -68,7 +99,10 @@ export const useFeedbackRequests = ({
         const response = await fetchWithLoopbackFallback(`${apiBase}${speechEndpoint}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({
+            text,
+            question_responses: questionResponses,
+          }),
         });
 
         if (!response.ok) {
@@ -134,17 +168,43 @@ export const useFeedbackRequests = ({
       sessionStartRef.current.visionIndex
     );
     const totalFrameCount = visionFramesRef.current.length;
-    const speechKey = `${sessionStartRef.current.transcriptIndex}:${sessionText}`;
+    const questionResponses = questionAnswersRef.current.reduce<QuestionResponsePayload[]>(
+      (items, answer) => {
+        const question = generatedQuestionsRef.current[answer.index];
+        const answerText = answer.answerText?.trim();
+        if (!question || !answerText || answerText === "--") {
+          return items;
+        }
+
+        items.push({
+          index: answer.index,
+          question: question.question,
+          category: question.category ?? null,
+          answer_text: answerText,
+        });
+
+        return items;
+      },
+      []
+    );
+    const speechKey = JSON.stringify({
+      transcriptIndex: sessionStartRef.current.transcriptIndex,
+      sessionText,
+      questionResponses: questionResponses.map((item) => ({
+        index: item.index,
+        answer_text: item.answer_text,
+      })),
+    });
 
     let nextSpeechFeedback: any | null = null;
     let nextVideoFeedback: any | null = null;
     let nextSpeechStatus: FeedbackStatus = "idle";
     let nextVideoStatus: FeedbackStatus = "idle";
 
-    if (sessionText && speechKey !== lastSpeechSentRef.current) {
-      nextSpeechFeedback = await requestSpeechFeedback(sessionText, speechKey);
+    if ((sessionText || questionResponses.length > 0) && speechKey !== lastSpeechSentRef.current) {
+      nextSpeechFeedback = await requestSpeechFeedback(sessionText, speechKey, questionResponses);
       nextSpeechStatus = nextSpeechFeedback ? "ready" : "error";
-    } else if (!sessionText) {
+    } else if (!sessionText && questionResponses.length === 0) {
       setSpeechFeedbackStatus("idle");
       nextSpeechStatus = "idle";
     } else {
@@ -163,7 +223,7 @@ export const useFeedbackRequests = ({
       nextVideoStatus = videoFeedback ? "ready" : "idle";
     }
 
-    if (!sessionText && sessionFrames.length === 0) {
+    if (!sessionText && questionResponses.length === 0 && sessionFrames.length === 0) {
       return null;
     }
 
