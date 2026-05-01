@@ -1,4 +1,4 @@
-import { useTheme } from "../theme";
+import { useTheme } from "../../themeCore";
 
 type ThemePickerProps = {
   title?: string;

@@ -5,15 +5,21 @@ import {
   getWsBase,
   openWebSocketWithLoopbackFallback,
 } from "../../network";
-import type { SessionType } from "../../hooks/useSessionType";
+import { CALL_ENVIRONMENT_PRESETS } from "./callEnvironments";
+import type {
+  CallEnvironmentId,
+  ConnectionStatus,
+  RecordMode,
+  SessionRecording,
+  SessionType,
+} from "../../types/interview";
 import {
-  CALL_ENVIRONMENT_PRESETS,
-  type CallEnvironmentId,
-} from "./callEnvironments";
-import type { SessionRecording } from "./types";
-
-type RecordMode = "audio" | "video" | "both";
-type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
+  formatCallClock,
+  renderAudienceScene,
+  renderMeetScene,
+  renderPlatformScene,
+  renderTeamsScene,
+} from "./WebRTCRecorderSceneHelpers";
 
 type DetectedFace = {
   boundingBox?: {
@@ -80,17 +86,6 @@ type Props = {
   onVisionData?: (data: unknown) => void;
   onRecordingReady?: (recording: SessionRecording | null) => void;
   onStreamReady?: (stream: MediaStream | null) => void;
-  onStartupMetric?: (
-    metric:
-      | "media_stream_ready_ms"
-      | "offer_created_ms"
-      | "ice_gathering_complete_ms"
-      | "results_socket_ready_ms"
-      | "signaling_response_ms"
-      | "remote_description_ready_ms"
-      | "ice_connected_ms"
-      | "webrtc_connected_ms"
-  ) => void;
 };
 
 declare global {
@@ -179,7 +174,6 @@ const WebRTCRecorder: React.FC<Props> = ({
   onVisionData,
   onRecordingReady,
   onStreamReady,
-  onStartupMetric,
 }) => {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const stageShellRef = useRef<HTMLDivElement | null>(null);
@@ -530,7 +524,6 @@ const WebRTCRecorder: React.FC<Props> = ({
     wsRef.current = ws;
     resultsReconnectAttemptsRef.current = 0;
     updateConnectionDetails({ resultsSocket: "connected" });
-    onStartupMetric?.("results_socket_ready_ms");
 
     const heartbeatSeconds =
       configRef.current?.results_ws_heartbeat_seconds ?? DEFAULT_RESULTS_HEARTBEAT_SECONDS;
@@ -765,7 +758,6 @@ const WebRTCRecorder: React.FC<Props> = ({
 
       streamRef.current = stream;
       onStreamReady?.(stream);
-      onStartupMetric?.("media_stream_ready_ms");
 
       if (videoRef.current && (mode === "video" || mode === "both")) {
         videoRef.current.srcObject = stream;
@@ -785,7 +777,6 @@ const WebRTCRecorder: React.FC<Props> = ({
       pcRef.current = pc;
       iceGatheringCleanupRef.current?.();
       iceGatheringCleanupRef.current = observeIceGatheringComplete(pc, () => {
-        onStartupMetric?.("ice_gathering_complete_ms");
         iceGatheringCleanupRef.current = null;
       });
 
@@ -793,7 +784,6 @@ const WebRTCRecorder: React.FC<Props> = ({
         const peerState = pc.connectionState;
         updateConnectionDetails({ peer: peerState });
         if (peerState === "connected") {
-          onStartupMetric?.("webrtc_connected_ms");
           updateStatus("connected");
         } else if (peerState === "failed") {
           updateStatus("error");
@@ -807,9 +797,6 @@ const WebRTCRecorder: React.FC<Props> = ({
       pc.oniceconnectionstatechange = () => {
         const iceState = pc.iceConnectionState;
         updateConnectionDetails({ ice: iceState });
-        if (iceState === "connected" || iceState === "completed") {
-          onStartupMetric?.("ice_connected_ms");
-        }
         if (iceState === "failed") {
           setError("ICE negotiation failed. Check TURN/STUN configuration.");
         }
@@ -845,7 +832,6 @@ const WebRTCRecorder: React.FC<Props> = ({
       updateConnectionDetails({ signaling: "creating_offer" });
 
       const offer = await pc.createOffer();
-      onStartupMetric?.("offer_created_ms");
       await pc.setLocalDescription(offer);
       void connectResultsWebSocket(nextSessionId).catch((socketError: unknown) => {
         reportResultsSocketFailure(socketError);
@@ -867,12 +853,10 @@ const WebRTCRecorder: React.FC<Props> = ({
       }
 
       const answer: SignalAnswer = await response.json();
-      onStartupMetric?.("signaling_response_ms");
       setSessionId(answer.session_id);
       updateConnectionDetails({ signaling: "answer_received" });
 
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      onStartupMetric?.("remote_description_ready_ms");
       await flushPendingRemoteIceCandidates();
       await flushPendingIceCandidates(answer.session_id);
       updateConnectionDetails({ signaling: "stable" });

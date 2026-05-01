@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
-import Footer from "../components/Footer";
-import Navbar from "../components/Navbar";
+import Footer from "../components/Layout/Footer";
+import Navbar from "../components/Layout/Navbar";
 import { useAuth } from "../auth";
 import { supabase } from "../supabase";
 

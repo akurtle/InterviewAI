@@ -6,7 +6,6 @@ type WhisperStatus = "idle" | "connecting" | "connected" | "recording" | "error"
 interface WhisperCallbacks {
   onTranscript?: (text: string, isFinal: boolean) => void;
   onStatusChange?: (status: WhisperStatus) => void;
-  onStartupMetric?: (metric: "asr_socket_ready_ms" | "asr_recording_ready_ms") => void;
 }
 
 type WhisperStartOptions = {
@@ -32,15 +31,12 @@ export function useWhisperWS(
 ) {
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
-  const lastWordsRef = useRef<string[]>([]);
   const ownsStreamRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const shouldReconnectRef = useRef(false);
 
-  const [partial] = useState("");
-  const [finals, setFinals] = useState<string>("");
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState<WhisperStatus>("idle");
 
@@ -127,7 +123,6 @@ export function useWhisperWS(
       const ws = await openWebSocketWithLoopbackFallback(wsUrl);
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
-      callbacks?.onStartupMetric?.("asr_socket_ready_ms");
 
       ws.onmessage = (event) => {
         const data = JSON.parse(String(event.data));
@@ -135,7 +130,6 @@ export function useWhisperWS(
         const delta = words.map((word: { word?: string }) => word.word ?? "").join(" ").trim();
         if (!delta) return;
 
-        setFinals((prev) => (prev ? `${prev} ${delta}` : delta));
         callbacks?.onTranscript?.(delta, true);
       };
 
@@ -177,7 +171,6 @@ export function useWhisperWS(
       reconnectAttemptsRef.current = 0;
       setIsRunning(true);
       updateStatus("recording");
-      callbacks?.onStartupMetric?.("asr_recording_ready_ms");
     } catch (error) {
       console.error("ASR start failed:", error);
       updateStatus("error");
@@ -190,10 +183,9 @@ export function useWhisperWS(
     setIsRunning(false);
     cleanupTransport(ownsStreamRef.current);
     ownsStreamRef.current = false;
-    lastWordsRef.current = [];
     reconnectAttemptsRef.current = 0;
     updateStatus("idle");
   };
 
-  return { start, stop, isRunning, partial, finals, status };
+  return { start, stop, isRunning, status };
 }
