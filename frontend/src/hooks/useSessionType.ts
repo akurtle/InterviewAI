@@ -4,20 +4,14 @@ import type { SessionType } from "../types/interview";
 
 type EndpointConfig = {
   questions: string;
-  speech: string;
-  video: string;
 };
 
 const DEFAULT_ENDPOINTS: Record<SessionType, EndpointConfig> = {
   interview: {
     questions: "/questions/generate",
-    speech: "/speech/feedback",
-    video: "/video/feedback",
   },
   pitch: {
     questions: "/questions/generate",
-    speech: "/speech/feedback",
-    video: "/video/feedback",
   },
 };
 

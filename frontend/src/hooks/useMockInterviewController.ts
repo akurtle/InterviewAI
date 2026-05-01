@@ -28,7 +28,7 @@ import {
 } from "../components/Interview/mockInterviewUtils";
 import { useFeedbackRequests } from "./useFeedbackRequests";
 import { useSessionType } from "./useSessionType";
-import { getApiBase, getWsBase } from "../network";
+import { getApiBase } from "../network";
 import { saveInterviewSession } from "../sessionStore";
 import type { SessionQuestionContext } from "../types/session";
 
@@ -69,7 +69,6 @@ export const useMockInterviewController = () => {
   const sessionRecordingRef = useRef<SessionRecording | null>(null);
   const mediaSelectionRef = useRef(mediaSelection);
   const apiBase = getApiBase();
-  const wsBase = getWsBase();
   const { endpoints, sessionType } = useSessionType();
   const { user, isConfigured: isSupabaseConfigured } = useAuth();
 
@@ -82,7 +81,7 @@ export const useMockInterviewController = () => {
     stop: stopAudio,
     isRunning: isAudioRunning,
     status: audioStatus,
-  } = useWhisperWS(`${wsBase}/asr`, {
+  } = useWhisperWS({
     onTranscript: handleTranscript,
   });
 
@@ -95,9 +94,6 @@ export const useMockInterviewController = () => {
     markSessionStart,
     requestFeedback,
   } = useFeedbackRequests({
-    apiBase,
-    speechEndpoint: endpoints.speech,
-    videoEndpoint: endpoints.video,
     generatedQuestions,
     questionAnswers,
     transcripts,

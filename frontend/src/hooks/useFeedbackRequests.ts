@@ -6,46 +6,39 @@ import type {
   TranscriptItem,
   VisionFrame,
 } from "../types/interview";
-import { fetchWithLoopbackFallback } from "../network";
+import {
+  generateSpeechFeedback,
+  generateVideoFeedback,
+  type QuestionResponsePayload,
+  type SpeechFeedbackResult,
+  type VideoFeedbackResult,
+} from "../feedback/clientFeedback";
 
 type FeedbackHookArgs = {
-  apiBase: string;
-  speechEndpoint: string;
-  videoEndpoint: string;
   generatedQuestions: GeneratedQuestion[];
   questionAnswers: QuestionAnswerReview[];
   transcripts: TranscriptItem[];
   visionFrames: VisionFrame[];
 };
 
-type QuestionResponsePayload = {
-  index: number;
-  question: string;
-  category: string | null;
-  answer_text: string;
-};
-
 export type FeedbackRequestResult = {
   sessionTranscripts: TranscriptItem[];
   sessionText: string;
   sessionFrames: VisionFrame[];
-  speechFeedback: any | null;
-  videoFeedback: any | null;
+  speechFeedback: SpeechFeedbackResult | null;
+  videoFeedback: VideoFeedbackResult | null;
   speechStatus: FeedbackStatus;
   videoStatus: FeedbackStatus;
 };
 
 export const useFeedbackRequests = ({
-  apiBase,
-  speechEndpoint,
-  videoEndpoint,
   generatedQuestions,
   questionAnswers,
   transcripts,
   visionFrames,
 }: FeedbackHookArgs) => {
-  const [speechFeedback, setSpeechFeedback] = useState<any>(null);
-  const [videoFeedback, setVideoFeedback] = useState<any>(null);
+  const [speechFeedback, setSpeechFeedback] = useState<SpeechFeedbackResult | null>(null);
+  const [videoFeedback, setVideoFeedback] = useState<VideoFeedbackResult | null>(null);
   const [speechFeedbackStatus, setSpeechFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [videoFeedbackStatus, setVideoFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
@@ -96,32 +89,22 @@ export const useFeedbackRequests = ({
       setFeedbackError(null);
 
       try {
-        const response = await fetchWithLoopbackFallback(`${apiBase}${speechEndpoint}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text,
-            question_responses: questionResponses,
-          }),
+        const data = generateSpeechFeedback({
+          text,
+          questionResponses,
         });
-
-        if (!response.ok) {
-          throw new Error(`Speech feedback failed (${response.status})`);
-        }
-
-        const data = await response.json();
         setSpeechFeedback(data);
         setSpeechFeedbackStatus("ready");
         lastSpeechSentRef.current = speechKey;
         return data;
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Speech feedback error:", error);
         setSpeechFeedbackStatus("error");
-        setFeedbackError(error?.message ?? "Failed to fetch speech feedback.");
+        setFeedbackError(error instanceof Error ? error.message : "Failed to generate speech feedback.");
         return null;
       }
     },
-    [apiBase, speechEndpoint]
+    []
   );
 
   const requestVideoFeedback = useCallback(
@@ -130,29 +113,19 @@ export const useFeedbackRequests = ({
       setFeedbackError(null);
 
       try {
-        const response = await fetchWithLoopbackFallback(`${apiBase}${videoEndpoint}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ frames }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Video feedback failed (${response.status})`);
-        }
-
-        const data = await response.json();
+        const data = generateVideoFeedback(frames);
         setVideoFeedback(data);
         setVideoFeedbackStatus("ready");
         lastVideoSentRef.current = totalFrameCount;
         return data;
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Video feedback error:", error);
         setVideoFeedbackStatus("error");
-        setFeedbackError(error?.message ?? "Failed to fetch video feedback.");
+        setFeedbackError(error instanceof Error ? error.message : "Failed to generate video feedback.");
         return null;
       }
     },
-    [apiBase, videoEndpoint]
+    []
   );
 
   const requestFeedback = useCallback(async (): Promise<FeedbackRequestResult | null> => {
@@ -196,8 +169,8 @@ export const useFeedbackRequests = ({
       })),
     });
 
-    let nextSpeechFeedback: any | null = null;
-    let nextVideoFeedback: any | null = null;
+    let nextSpeechFeedback: SpeechFeedbackResult | null = null;
+    let nextVideoFeedback: VideoFeedbackResult | null = null;
     let nextSpeechStatus: FeedbackStatus = "idle";
     let nextVideoStatus: FeedbackStatus = "idle";
 

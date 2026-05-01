@@ -130,7 +130,7 @@ const MockInterviewAudioPanel = ({ audioStatus, isAudioRunning, onToggle }: Prop
         {audioStatus === "error" && (
           <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
             <p className="text-sm text-red-300">
-              Audio connection failed. Check microphone access and backend availability.
+              Audio transcription failed. Check microphone access and browser speech recognition support.
             </p>
           </div>
         )}

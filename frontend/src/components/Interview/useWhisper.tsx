@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { getWsBase, openWebSocketWithLoopbackFallback } from "../../network";
 
 type WhisperStatus = "idle" | "connecting" | "connected" | "recording" | "error";
 
@@ -13,29 +12,63 @@ type WhisperStartOptions = {
   onPreferredDeviceUnavailable?: () => void;
 };
 
-const AUDIO_RECONNECT_DELAYS_MS = [1000, 2000, 5000];
-const isRecoverableDeviceSelectionError = (error: unknown) =>
-  error instanceof DOMException &&
-  (error.name === "NotFoundError" || error.name === "OverconstrainedError");
+type SpeechRecognitionAlternativeLike = {
+  transcript?: string;
+};
 
-const buildAudioConstraints = (audioDeviceId?: string, usePreferredDeviceId = true): MediaStreamConstraints => ({
-  audio:
-    audioDeviceId && usePreferredDeviceId
-      ? { deviceId: { exact: audioDeviceId } }
-      : true,
-});
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  [index: number]: SpeechRecognitionAlternativeLike | undefined;
+};
 
-export function useWhisperWS(
-  wsUrl = `${getWsBase()}/asr`,
-  callbacks?: WhisperCallbacks
-) {
-  const wsRef = useRef<WebSocket | null>(null);
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const ownsStreamRef = useRef(false);
-  const streamRef = useRef<MediaStream | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const reconnectTimerRef = useRef<number | null>(null);
-  const shouldReconnectRef = useRef(false);
+type SpeechRecognitionResultListLike = {
+  length: number;
+  [index: number]: SpeechRecognitionResultLike | undefined;
+};
+
+type SpeechRecognitionEventLike = Event & {
+  resultIndex: number;
+  results: SpeechRecognitionResultListLike;
+};
+
+type SpeechRecognitionErrorEventLike = Event & {
+  error?: string;
+  message?: string;
+};
+
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onstart: ((event: Event) => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: ((event: Event) => void) | null;
+};
+
+type SpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
+const RESTART_DELAY_MS = 500;
+
+const getSpeechRecognitionConstructor = () =>
+  window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
+
+export function useWhisperWS(callbacks?: WhisperCallbacks) {
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const restartTimerRef = useRef<number | null>(null);
+  const shouldRunRef = useRef(false);
+  const finalTranscriptBufferRef = useRef("");
 
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState<WhisperStatus>("idle");
@@ -45,145 +78,133 @@ export function useWhisperWS(
     callbacks?.onStatusChange?.(next);
   };
 
-  const clearReconnectTimer = () => {
-    if (reconnectTimerRef.current) {
-      window.clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
+  const clearRestartTimer = () => {
+    if (restartTimerRef.current) {
+      window.clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
     }
   };
 
-  const stopRecorderOnly = () => {
-    if (mediaRef.current && mediaRef.current.state !== "inactive") {
-      mediaRef.current.stop();
-    }
-    mediaRef.current = null;
-  };
+  const cleanupRecognition = (abort = false) => {
+    clearRestartTimer();
 
-  const getAudioMimeType = () => {
-    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
-    for (const candidate of candidates) {
-      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(candidate)) {
-        return candidate;
-      }
-    }
-    return "";
-  };
-
-  const cleanupTransport = (stopTracks: boolean) => {
-    stopRecorderOnly();
-
-    if (stopTracks) {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      return;
     }
 
-    if (wsRef.current) {
-      try {
-        wsRef.current.close();
-      } catch {
-        // The socket may already be closed during reconnect or teardown.
-      }
-    }
-    wsRef.current = null;
-  };
+    recognition.onstart = null;
+    recognition.onresult = null;
+    recognition.onerror = null;
+    recognition.onend = null;
 
-  const start = async (providedStream?: MediaStream, options?: WhisperStartOptions) => {
     try {
-      clearReconnectTimer();
-      updateStatus("connecting");
-
-      shouldReconnectRef.current = true;
-      let stream: MediaStream;
-      if (providedStream) {
-        stream = new MediaStream(providedStream.getAudioTracks());
+      if (abort) {
+        recognition.abort();
       } else {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(
-            buildAudioConstraints(options?.audioDeviceId, true)
-          );
-        } catch (error) {
-          if (!options?.audioDeviceId || !isRecoverableDeviceSelectionError(error)) {
-            throw error;
-          }
-
-          stream = await navigator.mediaDevices.getUserMedia(
-            buildAudioConstraints(options.audioDeviceId, false)
-          );
-          options.onPreferredDeviceUnavailable?.();
-        }
+        recognition.stop();
       }
+    } catch {
+      // Browser recognition can throw if it is already stopped.
+    }
 
-      ownsStreamRef.current = !providedStream;
-      streamRef.current = stream;
+    recognitionRef.current = null;
+  };
 
-      if (stream.getAudioTracks().length === 0) {
-        throw new Error("No audio track available for transcription.");
-      }
+  const start = async (_providedStream?: MediaStream, options?: WhisperStartOptions) => {
+    const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
+    if (!SpeechRecognitionCtor) {
+      updateStatus("error");
+      setIsRunning(false);
+      console.error("Browser speech recognition is unavailable in this browser.");
+      return;
+    }
 
-      const ws = await openWebSocketWithLoopbackFallback(wsUrl);
-      ws.binaryType = "arraybuffer";
-      wsRef.current = ws;
+    if (_providedStream || options?.audioDeviceId) {
+      console.info(
+        "Browser speech recognition uses the browser-selected microphone; MediaStream device binding is not supported."
+      );
+    }
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(String(event.data));
-        const words = data.words ?? [];
-        const delta = words.map((word: { word?: string }) => word.word ?? "").join(" ").trim();
-        if (!delta) return;
+    shouldRunRef.current = true;
+    clearRestartTimer();
+    cleanupRecognition(true);
+    updateStatus("connecting");
 
-        callbacks?.onTranscript?.(delta, true);
-      };
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
 
-      ws.onerror = () => {
-        updateStatus("error");
-      };
-
-      ws.onclose = () => {
-        wsRef.current = null;
-
-        if (!shouldReconnectRef.current || !streamRef.current) {
-          return;
-        }
-
-        const attempt = reconnectAttemptsRef.current;
-        const delay =
-          AUDIO_RECONNECT_DELAYS_MS[Math.min(attempt, AUDIO_RECONNECT_DELAYS_MS.length - 1)];
-        reconnectAttemptsRef.current += 1;
-        cleanupTransport(false);
-        reconnectTimerRef.current = window.setTimeout(() => {
-          void start(streamRef.current ?? undefined, options);
-        }, delay);
-      };
-
-      updateStatus("connected");
-
-      const mimeType = getAudioMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mediaRef.current = recorder;
-
-      recorder.ondataavailable = async (event) => {
-        if (!event.data || event.data.size === 0) return;
-        if (ws.readyState !== WebSocket.OPEN) return;
-        const buffer = await event.data.arrayBuffer();
-        ws.send(buffer);
-      };
-
-      recorder.start(250);
-      reconnectAttemptsRef.current = 0;
+    recognition.onstart = () => {
       setIsRunning(true);
       updateStatus("recording");
+    };
+
+    recognition.onresult = (event) => {
+      let finalText = "";
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript?.trim() ?? "";
+        if (result?.isFinal && transcript) {
+          finalText = `${finalText} ${transcript}`.trim();
+        }
+      }
+
+      if (!finalText) {
+        return;
+      }
+
+      if (finalText === finalTranscriptBufferRef.current) {
+        return;
+      }
+
+      finalTranscriptBufferRef.current = finalText;
+      callbacks?.onTranscript?.(finalText, true);
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === "no-speech" && shouldRunRef.current) {
+        return;
+      }
+
+      console.error("Browser speech recognition error:", event.message || event.error || event.type);
+      updateStatus("error");
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+
+      if (!shouldRunRef.current) {
+        setIsRunning(false);
+        updateStatus("idle");
+        return;
+      }
+
+      updateStatus("connected");
+      restartTimerRef.current = window.setTimeout(() => {
+        void start(undefined, options);
+      }, RESTART_DELAY_MS);
+    };
+
+    try {
+      recognition.start();
     } catch (error) {
-      console.error("ASR start failed:", error);
+      console.error("Browser speech recognition start failed:", error);
+      recognitionRef.current = null;
+      setIsRunning(false);
       updateStatus("error");
     }
   };
 
   const stop = () => {
-    shouldReconnectRef.current = false;
-    clearReconnectTimer();
+    shouldRunRef.current = false;
+    finalTranscriptBufferRef.current = "";
     setIsRunning(false);
-    cleanupTransport(ownsStreamRef.current);
-    ownsStreamRef.current = false;
-    reconnectAttemptsRef.current = 0;
+    cleanupRecognition(false);
     updateStatus("idle");
   };
 

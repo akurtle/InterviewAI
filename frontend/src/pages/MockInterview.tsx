@@ -172,14 +172,12 @@ function MockInterview() {
                 mode={controller.recordMode}
                 sessionType={controller.sessionType}
                 callEnvironment={controller.callEnvironment}
-                mouthTrackingEnabled={controller.mouthTrackingEnabled}
                 selectedAudioInputId={controller.mediaSelection.audioInputId}
                 selectedVideoInputId={controller.mediaSelection.videoInputId}
                 onPreferredDevicesUnavailable={controller.handlePreferredDevicesUnavailable}
                 onStatusChange={(status) => {
                   controller.setConnectionStatus(status);
                 }}
-                onTranscript={controller.handleTranscript}
                 onVisionData={controller.handleVisionData}
                 onRecordingReady={controller.handleRecordingReady}
                 onStreamReady={controller.setSharedMediaStream}

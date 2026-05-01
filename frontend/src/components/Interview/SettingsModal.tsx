@@ -164,8 +164,8 @@ export default function SettingsModal({
                 Mouth movement tracking
               </p>
               <p className="theme-text-muted mt-1 text-xs">
-                Uses backend face landmarks during video sessions to estimate visible
-                articulation and mouth opening.
+                Uses browser-side face metrics during video sessions to estimate
+                visible delivery cues without sending camera frames for scoring.
               </p>
             </div>
 
@@ -192,7 +192,7 @@ export default function SettingsModal({
           <p className="theme-text-muted mt-3 text-xs">
             {mouthTrackingEnabled
               ? "Enabled for new video sessions."
-              : "Disabled. Video sessions will skip backend mouth articulation analysis."}
+              : "Disabled. Video sessions will skip local mouth articulation analysis."}
           </p>
 
           {isSessionLocked && (

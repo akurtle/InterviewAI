@@ -243,7 +243,7 @@ export const getLiveArticulationStats = (
     mouthMovement,
     statusText:
       latestMouthFrame === null
-        ? "Waiting for backend mouth tracking..."
+        ? "Waiting for local mouth tracking..."
         : latestMouthFrame.articulation_active
           ? "Good visible articulation"
           : "Mouth movement looks limited",
