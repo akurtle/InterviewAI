@@ -1,101 +1,137 @@
-import React from 'react';
+import { Link } from "react-router-dom";
+import type { ReactNode } from "react";
 
-interface FeatureCardProps {
-  icon: React.ReactNode;
+type Feature = {
+  tag: string;
   title: string;
   description: string;
-}
-
-const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description }) => {
-  return (
-    <div className="theme-panel theme-card-hover group rounded-xl p-8 backdrop-blur transition-all duration-300 hover:scale-105">
-      <div className="theme-icon-badge mb-4 flex h-14 w-14 items-center justify-center rounded-lg transition">
-        {icon}
-      </div>
-      <h3 className="theme-text-primary mb-3 text-xl font-semibold">{title}</h3>
-      <p className="theme-text-muted leading-relaxed">{description}</p>
-    </div>
-  );
+  icon: ReactNode;
+  highlighted?: boolean;
 };
 
-const Features: React.FC = () => {
-  const features = [
-    {
-      icon: (
-        <svg className="theme-accent-text w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-      title: "AI Interview Analysis",
-      description: "Get real-time feedback on your interview performance including tone, clarity, and content quality."
-    },
-    {
-      icon: (
-        <svg className="theme-accent-text w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
-      ),
-      title: "Smart Resume Screening",
-      description: "AI-powered resume analysis that identifies strengths, gaps, and optimization opportunities."
-    },
-    {
-      icon: (
-        <svg className="theme-accent-text w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-      ),
-      title: "Instant Feedback",
-      description: "Receive detailed, actionable feedback within seconds to improve your next interview."
-    },
-    {
-      icon: (
-        <svg className="theme-accent-text w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      ),
-      title: "Performance Tracking",
-      description: "Track your progress over time with detailed analytics and improvement metrics."
-    },
-    {
-      icon: (
-        <svg className="theme-accent-text w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-        </svg>
-      ),
-      title: "Personalized Tips",
-      description: "Get customized improvement suggestions based on your unique interview style and career goals."
-    },
-    {
-      icon: (
-        <svg className="theme-accent-text w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-      ),
-      title: "Secure & Private",
-      description: "Your data is encrypted and private. We never share your interview recordings or resumes."
-    }
-  ];
+const features: Feature[] = [
+  {
+    tag: "Live",
+    title: "Real-time speech analysis",
+    description:
+      "See pacing, articulation, and filler-word signals while your answer is still fresh.",
+    highlighted: true,
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          d="M4 12h3l2-6 4 12 2-6h5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+        />
+      </svg>
+    ),
+  },
+  {
+    tag: "Smart",
+    title: "AI coaching feedback",
+    description:
+      "Turn each session into clear next steps for structure, specificity, and delivery.",
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          d="M12 3 4 7l8 4 8-4-8-4Zm-8 8 8 4 8-4M4 15l8 4 8-4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+        />
+      </svg>
+    ),
+  },
+  {
+    tag: "Track",
+    title: "Progress over time",
+    description:
+      "Review saved sessions and spot the moments where your speaking habits improve.",
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          d="M4 19V5m0 14h16M8 16v-4m4 4V8m4 8v-6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+        />
+      </svg>
+    ),
+  },
+  {
+    tag: "Contexts",
+    title: "Multiple contexts",
+    description:
+      "Switch between open talk, interview prep, pitch rehearsal, and resume-backed prompts.",
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          d="M6 6h6v6H6V6Zm6 6h6v6h-6v-6ZM6 16h2m10-8h-2m-5 11v-2M13 5V3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+        />
+      </svg>
+    ),
+  },
+];
 
+function Features() {
   return (
-    <section id="features" className="py-24">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <h2 className="theme-text-primary mb-4 text-4xl font-bold md:text-5xl">
-            Powerful Features for Interview Success
-          </h2>
-          <p className="theme-text-muted mx-auto max-w-2xl text-xl">
-            Everything you need to ace your next interview and land your dream job
+    <>
+      <section id="features" className="px-6 py-[100px]">
+        <div className="mx-auto max-w-[1100px]">
+          <div className="max-w-3xl">
+            <span className="pill">How it works</span>
+            <h2 className="section-heading theme-text-primary mt-5">
+              Every word. Every pause. Every opportunity.
+            </h2>
+          </div>
+
+          <div className="mt-12 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+            {features.map((feature) => (
+              <article
+                key={feature.title}
+                className={`relative rounded-2xl border border-[var(--border)] p-6 ${
+                  feature.highlighted ? "bg-[var(--accent-dim)]" : "bg-[var(--bg2)]"
+                }`}
+              >
+                <div className="mb-8 flex items-start justify-between gap-4">
+                  <span className="theme-icon-badge flex h-10 w-10 items-center justify-center rounded-xl">
+                    {feature.icon}
+                  </span>
+                  <span className="theme-chip rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]">
+                    {feature.tag}
+                  </span>
+                </div>
+                <h3 className="theme-text-primary text-lg font-semibold">{feature.title}</h3>
+                <p className="theme-text-secondary mt-3 text-sm leading-[1.65]">
+                  {feature.description}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" className="px-6 pb-24">
+        <div className="mx-auto max-w-[600px] rounded-3xl border border-[var(--accent-mid)] bg-[linear-gradient(135deg,var(--accent-dim),var(--bg2))] px-6 py-10 text-center shadow-[0_22px_60px_oklch(0.03_0.02_220_/_0.28)] sm:px-10">
+          <h2 className="section-heading theme-text-primary">Ready to find your voice?</h2>
+          <p className="theme-text-secondary mx-auto mt-4 max-w-md text-sm leading-[1.65]">
+            Start with a free practice mode, then bring in interview prompts, resume context, and
+            saved-session review when you need more structure.
           </p>
+          <Link
+            to="/interview-type"
+            className="cta-primary mt-7 inline-flex rounded-xl px-[34px] py-[15px] text-[15px] font-bold"
+          >
+            Start talking free -&gt;
+          </Link>
         </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
-            <FeatureCard key={index} {...feature} />
-          ))}
-        </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
-};
+}
 
 export default Features;

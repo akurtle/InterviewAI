@@ -1,6 +1,6 @@
 # InterviewAI — Claude Code Guide
 
-Full-stack interview coaching platform. FastAPI backend + React/TypeScript/Vite frontend.
+Full-stack speaking coaching platform. FastAPI backend + React/TypeScript/Vite frontend.
 
 ## Project Structure
 

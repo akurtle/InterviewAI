@@ -1,4 +1,4 @@
-# Interview AI Assistant
+# TalkItOutAI
 
 AI-powered interview feedback and resume analysis platform.
 

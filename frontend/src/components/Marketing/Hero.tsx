@@ -1,77 +1,161 @@
-import { Link } from 'react-router-dom';
+import { Link } from "react-router-dom";
+import type { ReactNode } from "react";
+import SoundWave from "./SoundWave";
 
-function Hero() {
-    return (
-        <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-            {/* Animated Background */}
-            <div className="absolute inset-0 opacity-30">
-                <div className="theme-glow-primary absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl animate-pulse"></div>
-                <div className="theme-glow-secondary absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl animate-pulse delay-700"></div>
-            </div>
-
-            {/* Grid Pattern Overlay */}
-            <div className="theme-grid-overlay absolute inset-0"></div>
-
-            {/* Content */}
-            <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-                {/* Floating Icons */}
-                <div className="theme-panel-soft absolute -top-20 left-10 flex h-12 w-12 items-center justify-center rounded-lg backdrop-blur animate-float">
-                    <svg className="theme-accent-text w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                </div>
-                <div className="theme-panel-soft absolute top-40 right-10 flex h-12 w-12 items-center justify-center rounded-lg backdrop-blur animate-float delay-300">
-                    <svg className="theme-accent-text w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                </div>
-
-                <h1 className="theme-text-primary mb-6 text-6xl font-bold leading-tight md:text-7xl">
-                    Perfect your interviews
-                </h1>
-
-                <p className="theme-text-secondary mx-auto mb-4 max-w-3xl text-xl">
-                    Perfect Your Interview Skills with AI-Powered Feedback
-                </p>
-
-                <p className="theme-text-muted mx-auto mb-10 max-w-2xl text-lg">
-                    Get instant AI analysis of your interviews and resumes with actionable insights to land your dream job
-                </p>
-
-
-
-                <Link
-                    to="/get-started"
-                    className="theme-button-primary group relative inline-flex rounded-lg px-8 py-4 text-lg font-semibold transition-all hover:scale-105"
-                >
-                    <span className="flex items-center space-x-2">
-                        <span>Get Started</span>
-                        <svg className="w-5 h-5 group-hover:translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                        </svg>
-                    </span>
-                </Link>
-                
-                {/* Stats */}
-                <div className="mt-16 flex items-center justify-center space-x-8">
-                    <div className="text-center">
-                        <p className="theme-text-primary text-3xl font-bold">10K+</p>
-                        <p className="theme-text-muted text-sm">Interviews Analyzed</p>
-                    </div>
-                    <div className="theme-stat-divider h-12 w-px"></div>
-                    <div className="text-center">
-                        <p className="theme-text-primary text-3xl font-bold">95%</p>
-                        <p className="theme-text-muted text-sm">Success Rate</p>
-                    </div>
-                    <div className="theme-stat-divider h-12 w-px"></div>
-                    <div className="text-center">
-                        <p className="theme-text-primary text-3xl font-bold">24/7</p>
-                        <p className="theme-text-muted text-sm">AI Support</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
+type HeroMode = {
+  title: string;
+  description: string;
+  className: string;
+  to: string;
+  storageMode: "interview" | "pitch";
+  practiceMode: "talk" | "interview" | "pitch";
+  icon: ReactNode;
 };
 
-export default Hero
+const modes: HeroMode[] = [
+  {
+    title: "Free Talk",
+    description: "Warm up with open-ended coaching.",
+    className: "mode-card-talk",
+    to: "/mock-interview?type=interview&mode=talk",
+    storageMode: "interview",
+    practiceMode: "talk",
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          d="M7 8h10M7 12h6m-8 8 3.2-3.2H18a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v6.8a3 3 0 0 0 3 3h.2L5 20Z"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+        />
+      </svg>
+    ),
+  },
+  {
+    title: "Interview Prep",
+    description: "Practice structured answers live.",
+    className: "mode-card-interview",
+    to: "/mock-interview?type=interview",
+    storageMode: "interview",
+    practiceMode: "interview",
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          d="M12 3v18m7-9H5m10.5-6.5 3 3m0 0-3 3m3-3h-13"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+        />
+      </svg>
+    ),
+  },
+  {
+    title: "Pitch Practice",
+    description: "Sharpen a concise presentation.",
+    className: "mode-card-pitch",
+    to: "/mock-interview?type=pitch",
+    storageMode: "pitch",
+    practiceMode: "pitch",
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          d="M5 15c3.5-8 8.5-11 14-11-1 5.5-4 10.5-12 14l-2 2v-5Zm8-4 4 4M9 7l8 8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+        />
+      </svg>
+    ),
+  },
+];
+
+function persistMode(mode: HeroMode) {
+  localStorage.setItem("interview_mode", mode.storageMode);
+  localStorage.setItem("practice_mode", mode.practiceMode);
+}
+
+function Hero() {
+  return (
+    <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 pb-14 pt-24">
+      <div className="absolute inset-0 z-0">
+        <div className="absolute left-1/2 top-[20%] h-[500px] w-[700px] -translate-x-1/2 rounded-full bg-[oklch(0.72_0.18_168_/_0.07)] blur-3xl" />
+        <div className="absolute left-1/2 top-[24%] h-[620px] w-[800px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,var(--bg)_42%,transparent_78%)]" />
+      </div>
+
+      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col items-center text-center">
+        <span className="pill">
+          <span className="pill-dot" />
+          AI-powered speaking coach
+        </span>
+
+        <h1 className="hero-heading mt-8 max-w-4xl theme-text-primary">
+          Speak with
+          <br />
+          <span className="hero-serif theme-accent-text">real confidence.</span>
+        </h1>
+
+        <p className="theme-text-secondary mt-7 max-w-[520px] text-[18px] font-light leading-[1.65]">
+          TalkItOut AI listens for pace, clarity, filler words, and presence so every practice
+          session turns into a sharper next attempt.
+        </p>
+
+        <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link
+            to="/interview-type"
+            className="cta-primary rounded-xl px-[34px] py-[15px] text-[15px] font-bold"
+          >
+            Start talking free -&gt;
+          </Link>
+          <a
+            href="#features"
+            className="cta-outline rounded-xl px-[34px] py-[15px] text-[15px] font-semibold"
+          >
+            Watch demo
+          </a>
+        </div>
+
+        <div className="mt-12 grid w-full max-w-4xl gap-3 md:grid-cols-3">
+          {modes.map((mode) => (
+            <Link
+              key={mode.title}
+              to={mode.to}
+              onClick={() => persistMode(mode)}
+              className={`mode-card ${mode.className} group flex items-center gap-3 rounded-2xl p-3 text-left transition`}
+            >
+              <span className="mode-icon-box flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-xl">
+                {mode.icon}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="mode-card-title block text-sm font-semibold text-[var(--txt)]">
+                  {mode.title}
+                </span>
+                <span className="block truncate text-xs text-[var(--txt2)]">{mode.description}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+
+        <div className="mt-[72px] w-full border-t border-[var(--border)] pt-10">
+          <div className="grid gap-8 sm:grid-cols-3">
+            <div>
+              <p className="theme-text-primary text-[30px] font-bold">12K+</p>
+              <p className="theme-text-dim text-sm">Sessions completed</p>
+            </div>
+            <div>
+              <p className="theme-text-primary text-[30px] font-bold">94%</p>
+              <p className="theme-text-dim text-sm">Reported improvement</p>
+            </div>
+            <div>
+              <p className="theme-text-primary text-[30px] font-bold">48h</p>
+              <p className="theme-text-dim text-sm">Avg. to noticeable change</p>
+            </div>
+          </div>
+        </div>
+
+        <SoundWave />
+      </div>
+    </section>
+  );
+}
+
+export default Hero;
