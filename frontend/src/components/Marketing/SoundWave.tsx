@@ -8,17 +8,19 @@ type WaveLayer = {
 };
 
 const LAYERS: WaveLayer[] = [
-  { amp: 18, freq: 0.022, speed: 1, phase: 0 },
-  { amp: 10, freq: 0.034, speed: 1.6, phase: 1.8 },
-  { amp: 6, freq: 0.055, speed: 2.2, phase: 3.4 },
+  { amp: 18, freq: 0.022, speed: 0.28, phase: 0 },
+  { amp: 10, freq: 0.034, speed: 0.42, phase: 1.8 },
+  { amp: 6, freq: 0.055, speed: 0.56, phase: 3.4 },
 ];
 
-const buildPoints = (layer: WaveLayer, time: number, scrollTop: number) => {
+const buildPoints = (layer: WaveLayer, time: number, scrollTop: number, width: number) => {
   const centerY = 40;
-  const scrollOffset = scrollTop * 0.04 * layer.speed;
+  const scrollOffset = scrollTop * 0.003 * layer.speed;
   const points: string[] = [];
+  const startX = -24;
+  const endX = width + 24;
 
-  for (let x = 0; x <= 1440; x += 12) {
+  for (let x = startX; x <= endX; x += 12) {
     const y =
       centerY +
       Math.sin(x * layer.freq + time * layer.speed + layer.phase + scrollOffset) * layer.amp +
@@ -31,6 +33,7 @@ const buildPoints = (layer: WaveLayer, time: number, scrollTop: number) => {
 };
 
 function SoundWave() {
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const mainRef = useRef<SVGPolylineElement | null>(null);
   const midRef = useRef<SVGPolylineElement | null>(null);
   const fineRef = useRef<SVGPolylineElement | null>(null);
@@ -42,10 +45,12 @@ function SoundWave() {
       const time = timestamp / 1000;
       const scrollRoot = document.getElementById("scroll-root");
       const scrollTop = scrollRoot?.scrollTop ?? window.scrollY;
+      const width = Math.max(1, Math.ceil(svgRef.current?.getBoundingClientRect().width ?? 1440));
       const refs = [mainRef, midRef, fineRef];
 
+      svgRef.current?.setAttribute("viewBox", `0 0 ${width} 80`);
       refs.forEach((ref, index) => {
-        ref.current?.setAttribute("points", buildPoints(LAYERS[index], time, scrollTop));
+        ref.current?.setAttribute("points", buildPoints(LAYERS[index], time, scrollTop, width));
       });
 
       frameId = window.requestAnimationFrame(draw);
@@ -61,6 +66,7 @@ function SoundWave() {
   return (
     <div className="mt-8 w-screen [margin-left:calc(-50vw+50%)]">
       <svg
+        ref={svgRef}
         className="h-20 w-full"
         preserveAspectRatio="none"
         viewBox="0 0 1440 80"
@@ -70,11 +76,12 @@ function SoundWave() {
           <linearGradient id="sound-wave-fade" x1="0%" x2="100%" y1="0%" y2="0%">
             <stop offset="0%" stopColor="black" />
             <stop offset="12%" stopColor="white" />
+            <stop offset="50%" stopColor="white" />
             <stop offset="88%" stopColor="white" />
             <stop offset="100%" stopColor="black" />
           </linearGradient>
-          <mask id="sound-wave-mask">
-            <rect fill="url(#sound-wave-fade)" height="80" width="1440" />
+          <mask id="sound-wave-mask" maskContentUnits="objectBoundingBox">
+            <rect fill="url(#sound-wave-fade)" height="1" width="1" x="0" y="0" />
           </mask>
         </defs>
         <g fill="none" mask="url(#sound-wave-mask)">

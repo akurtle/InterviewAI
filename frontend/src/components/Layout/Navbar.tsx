@@ -89,10 +89,12 @@ function Navbar() {
         scrolled ? "theme-nav-scrolled" : ""
       }`}
     >
-      <div className="flex h-full items-center justify-between gap-4 px-5 sm:px-8">
-        <BrandLogo />
+      <div className="relative flex h-full items-center justify-between gap-4 px-5 sm:px-8">
+        <div className="relative z-10">
+          <BrandLogo />
+        </div>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 md:flex">
           <a href="/#features" className={navLinkClass()}>
             Features
           </a>
@@ -104,7 +106,7 @@ function Navbar() {
           </a>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="relative z-10 flex items-center gap-2 sm:gap-3">
           {!user && (
             <Link to="/auth" className="cta-outline hidden rounded-xl px-5 py-2 text-sm sm:inline-flex">
               Log in
