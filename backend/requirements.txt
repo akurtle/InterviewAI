@@ -7,7 +7,6 @@ python-docx==1.1.0
 spacy==3.7.5
 pyresparser==1.0.6
 pydantic-settings==2.1.0
-aiortc==1.14.0
 whisperlivekit==0.2.2
 faster-whisper==1.2.1
 numpy==1.26.4

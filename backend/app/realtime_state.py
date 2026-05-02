@@ -5,8 +5,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from aiortc import RTCPeerConnection
-from aiortc.contrib.media import MediaRelay
 from fastapi import WebSocket
 
 
@@ -15,21 +13,13 @@ def utc_now() -> datetime:
 
 
 @dataclass
-class WebRTCSession:
-    peer_connection: RTCPeerConnection
-    mouth_tracking_enabled: bool = True
+class Session:
     created_at: datetime = field(default_factory=utc_now)
     last_seen_at: datetime = field(default_factory=utc_now)
     results_socket_connected_at: datetime | None = None
-    connection_state: str = "new"
-    ice_connection_state: str = "new"
     cleanup_task: asyncio.Task | None = None
     pending_results_messages: list[dict[str, Any]] = field(default_factory=list)
-    announced_local_candidate_keys: set[str] = field(default_factory=set)
-    initial_answer_candidates_registered: bool = False
 
 
-pcs: Dict[str, RTCPeerConnection] = {}
-sessions: Dict[str, WebRTCSession] = {}
-relay = MediaRelay()
+sessions: Dict[str, Session] = {}
 ws_clients: Dict[str, WebSocket] = {}
