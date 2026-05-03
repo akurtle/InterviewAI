@@ -1,6 +1,8 @@
 const DEFAULT_API_BASE = "http://127.0.0.1:8000";
+const DEFAULT_WS_BASE = "ws://127.0.0.1:8000";
 
 export const getApiBase = () => import.meta.env.VITE_API_BASE ?? DEFAULT_API_BASE;
+export const getWsBase = () => import.meta.env.VITE_WS_BASE ?? DEFAULT_WS_BASE;
 
 const getAlternateLoopbackUrl = (rawUrl: string): string | null => {
   try {

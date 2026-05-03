@@ -230,18 +230,19 @@ def _generate_questions_with_gemini(
         f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
     )
 
+    n = request.num_questions
     system_prompt = (
-        "You generate interview/sales/presentation questions. "
-        "Return only valid JSON with the schema: "
-        "{ \"questions\": [ {\"category\": string, \"question\": string} ] }."
+        f"You generate interview/sales/presentation coaching questions. "
+        f"Return ONLY valid JSON with this exact schema, no markdown: "
+        f'{{ "questions": [ {{"category": string, "question": string}} ] }}. '
+        f"Return exactly {n} question(s). No extra text."
     )
     user_prompt = {
         "role": request.role,
         "company": request.company,
         "call_type": request.call_type,
-        "num_questions": request.num_questions,
         "asked_questions": request.asked_questions,
-        "instructions": "Return only new questions that are distinct from asked_questions.",
+        "instructions": f"Return exactly {n} new question(s) distinct from asked_questions.",
     }
 
     payload = {
@@ -251,7 +252,7 @@ def _generate_questions_with_gemini(
         ],
         "generationConfig": {
             "temperature": 0.4,
-            "maxOutputTokens": 512,
+            "maxOutputTokens": 256,
         },
     }
 
