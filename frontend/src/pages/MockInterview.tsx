@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import FeedbackPanel from "../components/Interview/FeedbackPanel";
-import LiveArticulationPanel from "../components/Interview/LiveArticulationPanel";
+import FreeTalkSpeechPractice from "../components/Interview/FreeTalkSpeechPractice";
 import MockInterviewAudioPanel from "../components/Interview/MockInterviewAudioPanel";
 import MockInterviewInfoModal from "../components/Interview/MockInterviewInfoModal";
 import QuestionGenerator from "../components/Interview/QuestionGenerator";
@@ -10,7 +10,7 @@ import WebRTCRecorder from "../components/Interview/WebRTCRecorder";
 import { WaveIcon } from "../components/Brand/BrandLogo";
 import { useMockInterviewController } from "../hooks/useMockInterviewController";
 
-type AiTab = "coach" | "transcript" | "metrics";
+type AiTab = "coach" | "transcript";
 type PracticeMode = "talk" | "interview" | "pitch";
 
 const formatClock = (totalSeconds: number) => {
@@ -102,7 +102,7 @@ function MockInterview() {
   const coachMessage = isLive
     ? "Keep your answer anchored in one clear point, then support it with a concrete example."
     : controller.speechFeedbackStatus === "ready" || controller.videoFeedbackStatus === "ready"
-      ? "Your report is ready. Review the metrics tab for patterns to carry into the next run."
+      ? "Your report is ready. Review the feedback panel for patterns to carry into the next run."
       : "Start your session and I will give you real-time tips as your answer develops.";
 
   return (
@@ -184,28 +184,12 @@ function MockInterview() {
               />
             )}
 
-            {isLive && (
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="theme-panel-soft rounded-2xl p-4">
-                  <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">Pace</p>
-                  <p className="theme-text-primary mt-2 text-xl font-semibold">128 wpm</p>
-                </div>
-                <div className="theme-panel-soft rounded-2xl p-4">
-                  <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">Clarity</p>
-                  <p className="theme-text-primary mt-2 text-xl font-semibold">
-                    {controller.articulationStats.statusText}
-                  </p>
-                </div>
-                <div className="theme-panel-soft rounded-2xl p-4">
-                  <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">Filler words</p>
-                  <p className="theme-text-primary mt-2 text-xl font-semibold">3/min</p>
-                </div>
-              </div>
-            )}
-
-            {controller.recordMode !== "audio" && controller.mouthTrackingEnabled && (
+            {practiceMode === "talk" && (
               <div className="mt-5">
-                <LiveArticulationPanel stats={controller.articulationStats} />
+                <FreeTalkSpeechPractice
+                  transcripts={controller.transcripts}
+                  isLive={isLive}
+                />
               </div>
             )}
 
@@ -222,8 +206,8 @@ function MockInterview() {
         </section>
 
         <aside className="border-l border-[var(--border)] bg-[var(--bg2)] lg:overflow-y-auto">
-          <div className="sticky top-0 z-10 grid grid-cols-3 border-b border-[var(--border)] bg-[var(--bg2)]">
-            {(["coach", "transcript", "metrics"] as AiTab[]).map((tab) => (
+          <div className="sticky top-0 z-10 grid grid-cols-2 border-b border-[var(--border)] bg-[var(--bg2)]">
+            {(["coach", "transcript"] as AiTab[]).map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -312,33 +296,6 @@ function MockInterview() {
                 )}
               </div>
             )}
-
-            {activeTab === "metrics" && (
-              <div className="space-y-3">
-                {[
-                  ["Pace", "72%", "Slightly fast - aim for 120-150 wpm"],
-                  ["Clarity", "88%", "Strong sentence structure"],
-                  ["Filler words", "3/min", "Um appears most often"],
-                  ["Confidence", "81%", "Good eye contact and posture signals"],
-                ].map(([label, value, note]) => (
-                  <div key={label} className="theme-panel-soft rounded-2xl p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">{label}</p>
-                      <p className="theme-text-primary text-2xl font-bold">{value}</p>
-                    </div>
-                    {value.endsWith("%") && (
-                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--bg3)]">
-                        <div
-                          className="h-full rounded-full bg-[var(--accent)]"
-                          style={{ width: value }}
-                        />
-                      </div>
-                    )}
-                    <p className="theme-text-secondary mt-3 text-xs leading-[1.55]">{note}</p>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </aside>
       </main>
@@ -350,8 +307,6 @@ function MockInterview() {
         callEnvironment={controller.callEnvironment}
         onSetCallEnvironment={controller.setCallEnvironment}
         setRecordMode={controller.setRecordMode}
-        mouthTrackingEnabled={controller.mouthTrackingEnabled}
-        onSetMouthTrackingEnabled={controller.setMouthTrackingEnabled}
         mediaDevices={controller.mediaDevices}
         mediaSelection={controller.mediaSelection}
         onSelectAudioInput={controller.handleAudioInputSelect}
@@ -363,8 +318,6 @@ function MockInterview() {
         mediaDeviceMessage={controller.mediaDeviceMessage}
         mediaDeviceLabelsAvailable={controller.mediaDeviceLabelsAvailable}
         isSessionLocked={controller.isSessionLocked}
-        connectionStatus={controller.connectionStatus}
-        visionData={controller.visionData}
       />
 
       <MockInterviewInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} />

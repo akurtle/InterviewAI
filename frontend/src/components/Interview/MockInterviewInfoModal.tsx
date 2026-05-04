@@ -65,10 +65,10 @@ const MockInterviewInfoModal = ({ isOpen, onClose }: Props) => {
           </div>
 
           <div className="theme-panel-soft rounded-2xl p-4">
-            <p className="theme-text-primary text-sm font-semibold">Live articulation</p>
+            <p className="theme-text-primary text-sm font-semibold">Video feedback</p>
             <p className="theme-text-muted mt-2 text-sm">
-              Mouth tracking estimates visible articulation during video sessions. It helps with
-              presence and clarity, but it does not score exact pronunciation.
+              Video sessions can include delivery feedback after you stop, including presence and
+              camera engagement cues.
             </p>
           </div>
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth";
 import { useWhisperWS } from "../components/Interview/useWhisper";
 import type {
@@ -17,14 +17,11 @@ import type {
 import {
   buildDeviceLabel,
   createEmptyMediaDeviceCatalog,
-  getLiveArticulationStats,
   normalizeVisionFrame,
   persistCallEnvironment,
   persistMediaSelection,
-  persistMouthTrackingEnabled,
   readStoredCallEnvironment,
   readStoredMediaSelection,
-  readStoredMouthTrackingEnabled,
 } from "../components/Interview/mockInterviewUtils";
 import { useFeedbackRequests } from "./useFeedbackRequests";
 import { useSessionType } from "./useSessionType";
@@ -39,7 +36,6 @@ export const useMockInterviewController = () => {
   const [connectionStatus, setConnectionStatus] = useState<string>("idle");
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [interviewStartSignal, setInterviewStartSignal] = useState(0);
-  const [visionData, setVisionData] = useState<unknown>(null);
   const [visionFrames, setVisionFrames] = useState<VisionFrame[]>([]);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
   const [questionAnswers, setQuestionAnswers] = useState<QuestionAnswerReview[]>([]);
@@ -53,9 +49,6 @@ export const useMockInterviewController = () => {
   const [sharedMediaStream, setSharedMediaStream] = useState<MediaStream | null>(null);
   const [mediaDevices, setMediaDevices] = useState<MediaDeviceCatalog>(createEmptyMediaDeviceCatalog);
   const [mediaSelection, setMediaSelection] = useState<MediaDeviceSelection>(readStoredMediaSelection);
-  const [mouthTrackingEnabled, setMouthTrackingEnabled] = useState<boolean>(
-    readStoredMouthTrackingEnabled
-  );
   const [isRefreshingMediaDevices, setIsRefreshingMediaDevices] = useState(false);
   const [mediaDeviceMessage, setMediaDeviceMessage] = useState<string | null>(null);
   const [mediaDeviceLabelsAvailable, setMediaDeviceLabelsAvailable] = useState(false);
@@ -213,16 +206,6 @@ export const useMockInterviewController = () => {
   }, [markSessionStart]);
 
   const handleVisionData = useCallback((data: unknown) => {
-    console.log("Vision data:", data);
-    if (
-      typeof data === "object" &&
-      data !== null &&
-      "type" in data &&
-      data.type !== "frame"
-    ) {
-      setVisionData(data);
-    }
-
     const frame = normalizeVisionFrame(data);
     if (!frame) {
       return;
@@ -404,21 +387,12 @@ export const useMockInterviewController = () => {
     sessionRecordingRef.current = recording;
   }, []);
 
-  const articulationStats = useMemo(
-    () => getLiveArticulationStats(visionFrames, mouthTrackingEnabled),
-    [mouthTrackingEnabled, visionFrames]
-  );
-
   const isSessionLocked = connectionStatus === "connected" || connectionStatus === "connecting";
 
   useEffect(() => {
     mediaSelectionRef.current = mediaSelection;
     persistMediaSelection(mediaSelection);
   }, [mediaSelection]);
-
-  useEffect(() => {
-    persistMouthTrackingEnabled(mouthTrackingEnabled);
-  }, [mouthTrackingEnabled]);
 
   useEffect(() => {
     persistCallEnvironment(callEnvironment);
@@ -528,7 +502,6 @@ export const useMockInterviewController = () => {
   return {
     activeQuestion,
     apiBase,
-    articulationStats,
     audioStatus,
     callEnvironment,
     connectionStatus,
@@ -552,7 +525,6 @@ export const useMockInterviewController = () => {
     mediaDeviceMessage,
     mediaDevices,
     mediaSelection,
-    mouthTrackingEnabled,
     questionAnswers,
     recordMode,
     refreshMediaDevices,
@@ -561,7 +533,6 @@ export const useMockInterviewController = () => {
     sessionType,
     setCallEnvironment,
     setConnectionStatus,
-    setMouthTrackingEnabled,
     setQuestionAnswers,
     setQuestionContext,
     setRecordMode,
@@ -572,7 +543,6 @@ export const useMockInterviewController = () => {
     user,
     videoFeedback,
     videoFeedbackStatus,
-    visionData,
     visionFrames,
   };
 };

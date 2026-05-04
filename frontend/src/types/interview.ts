@@ -113,11 +113,3 @@ export type ActiveQuestion = {
   index: number;
   total: number;
 };
-
-export type LiveArticulationStats = {
-  mouthOpenRatio: number | null;
-  articulationRate: number | null;
-  mouthMovement: number | null;
-  statusText: string;
-  toneClassName: string;
-};

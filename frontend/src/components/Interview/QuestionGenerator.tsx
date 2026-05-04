@@ -797,9 +797,10 @@ export default function QuestionGenerator({
             )}
           </div>
         ) : rawResponse ? (
-          <pre className="whitespace-pre-wrap text-xs text-gray-300">
-            {JSON.stringify(rawResponse, null, 2)}
-          </pre>
+          <p className="theme-text-dim text-sm">
+            The generator returned a response, but it did not include a usable prompt. Adjust the
+            brief and try again.
+          </p>
         ) : (
           <p className="theme-text-dim text-sm">
             {sessionType === "pitch"

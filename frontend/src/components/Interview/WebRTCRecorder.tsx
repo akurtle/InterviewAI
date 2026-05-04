@@ -111,20 +111,8 @@ const WebRTCRecorder: React.FC<Props> = ({
 
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [connectionDetails, setConnectionDetails] = useState<{
-    capture: string;
-    recording: string;
-    vision: string;
-    processing: string;
-  }>({
-    capture: "idle",
-    recording: "idle",
-    vision: "idle",
-    processing: "local",
-  });
   const environment = CALL_ENVIRONMENT_PRESETS[callEnvironment];
   const elapsedLabel = formatCallClock(elapsedMs);
   const supportsFullscreen =
@@ -135,17 +123,6 @@ const WebRTCRecorder: React.FC<Props> = ({
   const updateStatus = (newStatus: ConnectionStatus) => {
     setStatus(newStatus);
     onStatusChange?.(newStatus);
-  };
-
-  const updateConnectionDetails = (
-    patch: Partial<{
-      capture: string;
-      recording: string;
-      vision: string;
-      processing: string;
-    }>
-  ) => {
-    setConnectionDetails((prev) => ({ ...prev, ...patch }));
   };
 
   const pickRecordingMimeType = () => {
@@ -290,13 +267,11 @@ const WebRTCRecorder: React.FC<Props> = ({
         source: "client",
         message: "Browser face detection is unavailable. Video feedback metrics were not captured.",
       });
-      updateConnectionDetails({ vision: "unavailable" });
       visionEnabledRef.current = false;
       return;
     }
 
     visionEnabledRef.current = true;
-    updateConnectionDetails({ vision: "sampling" });
     if (visionIntervalRef.current) {
       window.clearInterval(visionIntervalRef.current);
     }
@@ -378,12 +353,6 @@ const WebRTCRecorder: React.FC<Props> = ({
   const startSession = async () => {
     setError(null);
     updateStatus("connecting");
-    updateConnectionDetails({
-      capture: "requesting",
-      recording: "idle",
-      vision: mode === "video" || mode === "both" ? "starting" : "off",
-      processing: "local",
-    });
 
     try {
       const preferredKinds: Array<"audioinput" | "videoinput"> = [];
@@ -422,7 +391,6 @@ const WebRTCRecorder: React.FC<Props> = ({
 
       streamRef.current = stream;
       onStreamReady?.(stream);
-      updateConnectionDetails({ capture: "active" });
 
       if (videoRef.current && (mode === "video" || mode === "both")) {
         videoRef.current.srcObject = stream;
@@ -431,19 +399,13 @@ const WebRTCRecorder: React.FC<Props> = ({
       }
 
       startLocalRecording(stream);
-      updateConnectionDetails({
-        recording: stream.getVideoTracks().length > 0 ? "recording" : "off",
-      });
 
-      const nextSessionId = sessionId ?? crypto.randomUUID();
-      setSessionId(nextSessionId);
       startVisionSampling();
       updateStatus("connected");
     } catch (sessionError: unknown) {
       console.error("Local media setup error:", sessionError);
       setError(sessionError instanceof Error ? sessionError.message : "Failed to start local media session");
       updateStatus("error");
-      updateConnectionDetails({ capture: "error", processing: "local" });
     }
   };
 
@@ -472,14 +434,7 @@ const WebRTCRecorder: React.FC<Props> = ({
     visionEnabledRef.current = false;
     visionBusyRef.current = false;
 
-    updateConnectionDetails({
-      capture: "idle",
-      recording: "idle",
-      vision: "idle",
-      processing: "local",
-    });
     updateStatus("idle");
-    setSessionId(null);
     isStoppingRef.current = false;
   };
 
@@ -564,7 +519,6 @@ const WebRTCRecorder: React.FC<Props> = ({
               {status === "disconnected" && "Disconnected"}
               {status === "error" && "Error"}
             </p>
-            {sessionId && <p className="theme-text-dim text-xs">Session: {sessionId.slice(0, 8)}</p>}
           </div>
         </div>
 
@@ -708,25 +662,6 @@ const WebRTCRecorder: React.FC<Props> = ({
             <p className="text-sm text-red-300">{error}</p>
           </div>
         )}
-
-        <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="theme-panel-soft rounded-lg px-3 py-2">
-            <p className="theme-text-dim text-xs uppercase tracking-wide">Capture</p>
-            <p className="theme-text-primary mt-1 text-sm font-semibold">{connectionDetails.capture}</p>
-          </div>
-          <div className="theme-panel-soft rounded-lg px-3 py-2">
-            <p className="theme-text-dim text-xs uppercase tracking-wide">Recording</p>
-            <p className="theme-text-primary mt-1 text-sm font-semibold">{connectionDetails.recording}</p>
-          </div>
-          <div className="theme-panel-soft rounded-lg px-3 py-2">
-            <p className="theme-text-dim text-xs uppercase tracking-wide">Vision</p>
-            <p className="theme-text-primary mt-1 text-sm font-semibold">{connectionDetails.vision}</p>
-          </div>
-          <div className="theme-panel-soft rounded-lg px-3 py-2">
-            <p className="theme-text-dim text-xs uppercase tracking-wide">Processing</p>
-            <p className="theme-text-primary mt-1 text-sm font-semibold">{connectionDetails.processing}</p>
-          </div>
-        </div>
 
         <div className="flex gap-3">
           {status === "idle" || status === "error" ? (
