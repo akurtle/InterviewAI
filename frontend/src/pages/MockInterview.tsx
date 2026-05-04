@@ -230,7 +230,7 @@ function MockInterview() {
                   <p className="theme-text-primary text-sm leading-[1.65]">{coachMessage}</p>
                 </div>
 
-                {practiceMode === "talk" ? (
+                {practiceMode === "talk" && (
                   <div className="theme-panel-soft rounded-2xl p-4">
                     <p className="theme-text-primary text-sm font-semibold">Quick tips</p>
                     <div className="mt-3 space-y-3">
@@ -246,18 +246,6 @@ function MockInterview() {
                       ))}
                     </div>
                   </div>
-                ) : (
-                  <QuestionGenerator
-                    apiBase={controller.apiBase}
-                    endpointPath={controller.endpoints.questions}
-                    sessionType={controller.sessionType}
-                    onQuestions={controller.handleQuestions}
-                    onAnswersChange={controller.setQuestionAnswers}
-                    onInputChange={controller.setQuestionContext}
-                    transcripts={controller.transcripts}
-                    startSignal={controller.interviewStartSignal}
-                    onCurrentQuestionChange={controller.handleCurrentQuestionChange}
-                  />
                 )}
 
                 {controller.sessionSaveMessage && (
@@ -276,6 +264,22 @@ function MockInterview() {
                   </div>
                 )}
               </>
+            )}
+
+            {practiceMode !== "talk" && (
+              <div className={activeTab !== "coach" ? "hidden" : ""}>
+                <QuestionGenerator
+                  apiBase={controller.apiBase}
+                  endpointPath={controller.endpoints.questions}
+                  sessionType={controller.sessionType}
+                  onQuestions={controller.handleQuestions}
+                  onAnswersChange={controller.setQuestionAnswers}
+                  onInputChange={controller.setQuestionContext}
+                  transcripts={controller.transcripts}
+                  startSignal={controller.interviewStartSignal}
+                  onCurrentQuestionChange={controller.handleCurrentQuestionChange}
+                />
+              </div>
             )}
 
             {activeTab === "transcript" && (
