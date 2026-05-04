@@ -9,6 +9,7 @@ import SettingsModal from "../components/Interview/SettingsModal";
 import WebRTCRecorder from "../components/Interview/WebRTCRecorder";
 import { WaveIcon } from "../components/Brand/BrandLogo";
 import { useMockInterviewController } from "../hooks/useMockInterviewController";
+import { useLiveSpeechMetrics } from "../hooks/useLiveSpeechMetrics";
 
 type AiTab = "coach" | "transcript";
 type PracticeMode = "talk" | "interview" | "pitch";
@@ -98,6 +99,8 @@ function MockInterview() {
       window.clearInterval(timer);
     };
   }, [isLive, elapsedSeconds]);
+
+  const speechMetrics = useLiveSpeechMetrics(controller.transcripts, isLive);
 
   const coachMessage = isLive
     ? "Keep your answer anchored in one clear point, then support it with a concrete example."
@@ -230,6 +233,40 @@ function MockInterview() {
                   <p className="theme-text-primary text-sm leading-[1.65]">{coachMessage}</p>
                 </div>
 
+                {isLive && speechMetrics.tips.length > 0 && (
+                  <div className="theme-panel-soft rounded-2xl p-4">
+                    <p className="theme-text-dim mb-3 text-xs uppercase tracking-wide">
+                      Live analysis
+                    </p>
+                    <div className="space-y-2">
+                      {speechMetrics.tips.map((tip) => (
+                        <div key={tip.id} className="flex items-start gap-2">
+                          <span
+                            className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
+                              tip.level === "warn"
+                                ? "bg-yellow-400"
+                                : tip.level === "good"
+                                  ? "bg-emerald-400"
+                                  : "bg-[var(--accent)]"
+                            }`}
+                          />
+                          <p
+                            className={`text-sm leading-snug ${
+                              tip.level === "warn"
+                                ? "text-yellow-200"
+                                : tip.level === "good"
+                                  ? "text-emerald-300"
+                                  : "theme-text-secondary"
+                            }`}
+                          >
+                            {tip.text}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {practiceMode === "talk" && (
                   <div className="theme-panel-soft rounded-2xl p-4">
                     <p className="theme-text-primary text-sm font-semibold">Quick tips</p>
@@ -284,7 +321,56 @@ function MockInterview() {
 
             {activeTab === "transcript" && (
               <div className="space-y-3">
-                {controller.transcripts.length > 0 ? (
+                {controller.generatedQuestions.length > 0 ? (
+                  (() => {
+                    const lastEndTs = controller.questionAnswers.reduce(
+                      (max, a) => Math.max(max, a.endedAtMs ?? 0),
+                      0
+                    );
+                    return controller.generatedQuestions.map((question, i) => {
+                      const answer = controller.questionAnswers.find((a) => a.index === i);
+                      const isActive = controller.activeQuestion?.index === i;
+                      const segments = answer
+                        ? answer.transcriptSegments
+                        : isActive
+                          ? controller.transcripts.filter((t) => t.ts > lastEndTs && t.isFinal)
+                          : [];
+                      return (
+                        <div key={i} className="theme-panel-soft rounded-2xl p-4">
+                          <div className="mb-2 flex items-start gap-2">
+                            <span className="theme-accent-text mt-0.5 shrink-0 font-mono text-xs">
+                              {i + 1}
+                            </span>
+                            <p className="theme-text-primary text-sm font-semibold leading-snug">
+                              {question.question}
+                            </p>
+                            {isActive && (
+                              <span className="theme-chip ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                                Live
+                              </span>
+                            )}
+                          </div>
+                          {segments.length > 0 ? (
+                            <div className="mt-2 space-y-1 border-l-2 border-[var(--border)] pl-3">
+                              {segments.map((seg, si) => (
+                                <p
+                                  key={`${seg.ts}-${si}`}
+                                  className="theme-text-secondary text-sm leading-[1.6]"
+                                >
+                                  {seg.text}
+                                </p>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="theme-text-dim mt-2 pl-5 text-xs">
+                              {isActive ? "Waiting for your response…" : "No answer recorded yet."}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()
+                ) : controller.transcripts.length > 0 ? (
                   controller.transcripts.map((item, index) => (
                     <div key={`${item.ts}-${index}`} className="theme-panel-soft rounded-2xl p-4">
                       <p className="theme-text-dim text-xs">
