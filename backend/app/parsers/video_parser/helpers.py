@@ -4,7 +4,7 @@ import logging
 import math
 import re
 import time
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Optional
 
 from fastapi import WebSocket
 
@@ -257,19 +257,41 @@ async def run_video_pipeline(session_id: str, track):
         face_mesh.close()
 
 
+def _parse_timestamp(t) -> Optional[float]:
+    """Convert a float or 'H:MM:SS' string to seconds."""
+    if t is None:
+        return None
+    if isinstance(t, (int, float)):
+        return float(t)
+    try:
+        parts = str(t).split(":")
+        return sum(float(p) * 60 ** (len(parts) - 1 - i) for i, p in enumerate(parts))
+    except Exception:
+        return None
+
+
 async def send_results(ws: WebSocket, gen):
     last_sent_word_end = -1.0
     last_text = ""
 
     async for msg in gen:
-        lines = getattr(msg, "lines", None)
+        # whisperlivekit yields plain dicts; fall back to getattr for other backends
+        lines = msg.get("lines") if isinstance(msg, dict) else getattr(msg, "lines", None)
         if not lines:
             continue
 
         for line in lines:
-            text = (getattr(line, "text", "") or "").strip()
-            end = getattr(line, "end", None)
-            start = getattr(line, "start", None)
+            if isinstance(line, dict):
+                text = (line.get("text", "") or "").strip()
+                # library uses "beg" for start and "end" for end, both as "H:MM:SS" strings
+                end = _parse_timestamp(line.get("end"))
+                start = _parse_timestamp(line.get("beg"))
+                line_words = None  # library does not expose word-level timestamps here
+            else:
+                text = (getattr(line, "text", "") or "").strip()
+                end = getattr(line, "end", None)
+                start = getattr(line, "start", None)
+                line_words = getattr(line, "words", None) or getattr(line, "word", None)
 
             if not text or end is None:
                 continue
@@ -280,8 +302,6 @@ async def send_results(ws: WebSocket, gen):
 
             word_items = []
 
-            # Prefer real word-level timestamps if available
-            line_words = getattr(line, "words", None) or getattr(line, "word", None)
             if line_words:
                 for w in line_words:
                     w_text = getattr(w, "word", None) or getattr(w, "text", None)

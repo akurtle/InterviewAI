@@ -9,11 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-1.5-flash"
-    gemini_api_url: str = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        "gemini-1.5-flash:generateContent"
-    )
+    gemini_model: str = "gemini-2.0-flash"
     cors_allow_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:3000",

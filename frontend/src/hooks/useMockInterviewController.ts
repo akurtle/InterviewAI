@@ -65,6 +65,7 @@ export const useMockInterviewController = () => {
   const prevConnectionStatusRef = useRef(connectionStatus);
   const prevAudioRunningRef = useRef(false);
   const sessionStartedAtRef = useRef<number | null>(null);
+  const activeQuestionIndexRef = useRef<number | null>(null);
   const persistedSessionKeyRef = useRef<string>("");
   const sessionRecordingRef = useRef<SessionRecording | null>(null);
   const mediaSelectionRef = useRef(mediaSelection);
@@ -74,7 +75,10 @@ export const useMockInterviewController = () => {
   const { user, isConfigured: isSupabaseConfigured } = useAuth();
 
   const handleTranscript = useCallback((text: string, isFinal: boolean) => {
-    setTranscripts((prev) => [...prev, { text, isFinal, ts: Date.now() }]);
+    setTranscripts((prev) => [
+      ...prev,
+      { text, isFinal, ts: Date.now(), questionIndex: activeQuestionIndexRef.current },
+    ]);
   }, []);
 
   const {
@@ -217,7 +221,6 @@ export const useMockInterviewController = () => {
   }, [markSessionStart]);
 
   const handleVisionData = useCallback((data: unknown) => {
-    console.log("Vision data:", data);
     if (
       typeof data === "object" &&
       data !== null &&
@@ -383,10 +386,12 @@ export const useMockInterviewController = () => {
   const handleCurrentQuestionChange = useCallback(
     (question: GeneratedQuestion | null, index: number, total: number) => {
       if (!question) {
+        activeQuestionIndexRef.current = null;
         setActiveQuestion(null);
         return;
       }
 
+      activeQuestionIndexRef.current = index;
       setActiveQuestion({
         text: question.question,
         index,

@@ -478,6 +478,12 @@ async def asr(ws: WebSocket):
         logging.exception("WS crashed while processing audio")
     finally:
         task.cancel()
+        for ap_task in ap.all_tasks_for_cleanup:
+            ap_task.cancel()
+        try:
+            await ap.ffmpeg_manager.stop()
+        except Exception:
+            pass
         try:
             await ws.close()
         except Exception:

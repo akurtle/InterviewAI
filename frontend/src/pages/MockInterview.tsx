@@ -13,6 +13,10 @@ import { useMockInterviewController } from "../hooks/useMockInterviewController"
 type AiTab = "coach" | "transcript" | "metrics";
 type PracticeMode = "talk" | "interview" | "pitch";
 
+const LIVE_FILLER_WORDS = new Set([
+  "um","uh","erm","like","actually","basically","literally","well","so","right","okay","ok",
+]);
+
 const formatClock = (totalSeconds: number) => {
   const minutes = Math.floor(totalSeconds / 60)
     .toString()
@@ -21,12 +25,6 @@ const formatClock = (totalSeconds: number) => {
   return `${minutes}:${seconds}`;
 };
 
-const transcriptTime = (ts: number, startTs: number | null) => {
-  if (!startTs) {
-    return "00:00";
-  }
-  return formatClock(Math.max(0, Math.floor((ts - startTs) / 1000)));
-};
 
 function getStoredPracticeMode(search: string): PracticeMode {
   const params = new URLSearchParams(search);
@@ -70,7 +68,21 @@ function MockInterview() {
     controller.connectionStatus === "connecting" ||
     controller.connectionStatus === "connected" ||
     controller.isAudioRunning;
-  const transcriptStartTs = controller.transcripts[0]?.ts ?? null;
+
+  const liveMetrics = useMemo(() => {
+    const words = controller.transcripts
+      .filter((t) => t.isFinal)
+      .flatMap((t) => t.text.trim().split(/\s+/).filter(Boolean));
+    const wordCount = words.length;
+    const fillerCount = words.filter((w) => LIVE_FILLER_WORDS.has(w.toLowerCase())).length;
+    const minutes = elapsedSeconds / 60;
+    const hasEnoughData = elapsedSeconds >= 10 && wordCount >= 3;
+    return {
+      wpm: hasEnoughData ? Math.round(wordCount / minutes) : null,
+      fillerPerMin: hasEnoughData ? +(fillerCount / minutes).toFixed(1) : null,
+    };
+  }, [controller.transcripts, elapsedSeconds]);
+
   const sessionLabel =
     practiceMode === "talk"
       ? "Free Talk"
@@ -190,7 +202,9 @@ function MockInterview() {
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="theme-panel-soft rounded-2xl p-4">
                   <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">Pace</p>
-                  <p className="theme-text-primary mt-2 text-xl font-semibold">128 wpm</p>
+                  <p className="theme-text-primary mt-2 text-xl font-semibold">
+                    {liveMetrics.wpm != null ? `${liveMetrics.wpm} wpm` : "—"}
+                  </p>
                 </div>
                 <div className="theme-panel-soft rounded-2xl p-4">
                   <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">Clarity</p>
@@ -200,7 +214,9 @@ function MockInterview() {
                 </div>
                 <div className="theme-panel-soft rounded-2xl p-4">
                   <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">Filler words</p>
-                  <p className="theme-text-primary mt-2 text-xl font-semibold">3/min</p>
+                  <p className="theme-text-primary mt-2 text-xl font-semibold">
+                    {liveMetrics.fillerPerMin != null ? `${liveMetrics.fillerPerMin}/min` : "—"}
+                  </p>
                 </div>
               </div>
             )}
@@ -298,49 +314,149 @@ function MockInterview() {
 
             {activeTab === "transcript" && (
               <div className="space-y-3">
-                {controller.transcripts.length > 0 ? (
-                  controller.transcripts.map((item, index) => (
-                    <div key={`${item.ts}-${index}`} className="theme-panel-soft rounded-2xl p-4">
-                      <p className="theme-text-dim text-xs">
-                        {transcriptTime(item.ts, transcriptStartTs)}
+                {practiceMode === "talk" ? (
+                  (() => {
+                    const finalItems = controller.transcripts.filter((t) => t.isFinal);
+                    const paragraph = finalItems.map((t) => t.text).join(" ").trim();
+                    const durationSec = finalItems.length > 0
+                      ? Math.max(0, Math.floor(
+                          (finalItems[finalItems.length - 1].ts - finalItems[0].ts) / 1000
+                        ))
+                      : 0;
+                    return paragraph ? (
+                      <div className="theme-panel-soft rounded-2xl p-4">
+                        <p className="theme-text-dim text-xs mb-2">{formatClock(durationSec)} spoken</p>
+                        <p className="theme-text-secondary text-sm leading-[1.7]">{paragraph}</p>
+                      </div>
+                    ) : (
+                      <p className="theme-text-dim pt-8 text-center text-sm">
+                        Your transcript will appear here as you speak.
                       </p>
-                      <p className="theme-text-secondary mt-2 text-sm leading-[1.6]">{item.text}</p>
-                    </div>
-                  ))
+                    );
+                  })()
                 ) : (
-                  <p className="theme-text-dim pt-8 text-center text-sm">
-                    Transcript lines will appear here as you speak.
-                  </p>
+                  (() => {
+                    const questions = controller.generatedQuestions;
+                    const answers = controller.questionAnswers;
+                    // Build per-question transcript from finalized answers first,
+                    // then fall back to live tagged transcripts for the current question
+                    const answerMap = new Map(answers.map((a) => [a.index, a]));
+                    const liveByQuestion = new Map<number, string>();
+                    controller.transcripts
+                      .filter((t) => t.isFinal && t.questionIndex != null)
+                      .forEach((t) => {
+                        const qi = t.questionIndex as number;
+                        liveByQuestion.set(qi, ((liveByQuestion.get(qi) ?? "") + " " + t.text).trim());
+                      });
+
+                    if (questions.length === 0) {
+                      return (
+                        <p className="theme-text-dim pt-8 text-center text-sm">
+                          Generate questions and start the interview to see your transcript here.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-4">
+                        {questions.map((q, idx) => {
+                          const answer = answerMap.get(idx);
+                          const text = answer
+                            ? answer.answerText === "--" ? "" : answer.answerText
+                            : liveByQuestion.get(idx) ?? "";
+                          return (
+                            <div key={idx} className="theme-panel-soft rounded-2xl p-4">
+                              <p className="theme-text-dim text-xs uppercase tracking-wide mb-1">
+                                Q{idx + 1}
+                                {answer?.durationSeconds != null
+                                  ? ` · ${formatClock(answer.durationSeconds)}`
+                                  : ""}
+                              </p>
+                              <p className="theme-text-primary text-sm font-semibold mb-2">{q.question}</p>
+                              {text ? (
+                                <p className="theme-text-secondary text-sm leading-[1.7]">{text}</p>
+                              ) : (
+                                <p className="theme-text-dim text-sm italic">No answer recorded yet.</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             )}
 
-            {activeTab === "metrics" && (
-              <div className="space-y-3">
-                {[
-                  ["Pace", "72%", "Slightly fast - aim for 120-150 wpm"],
-                  ["Clarity", "88%", "Strong sentence structure"],
-                  ["Filler words", "3/min", "Um appears most often"],
-                  ["Confidence", "81%", "Good eye contact and posture signals"],
-                ].map(([label, value, note]) => (
-                  <div key={label} className="theme-panel-soft rounded-2xl p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">{label}</p>
-                      <p className="theme-text-primary text-2xl font-bold">{value}</p>
-                    </div>
-                    {value.endsWith("%") && (
-                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--bg3)]">
-                        <div
-                          className="h-full rounded-full bg-[var(--accent)]"
-                          style={{ width: value }}
-                        />
+            {activeTab === "metrics" && (() => {
+              const sm = controller.speechFeedback?.metrics;
+              const sscore = typeof controller.speechFeedback?.score === "number"
+                ? controller.speechFeedback.score
+                : null;
+              const vscore = typeof controller.videoFeedback?.score === "number"
+                ? controller.videoFeedback.score
+                : null;
+              const fillerPerMin =
+                sm?.filler_count != null && sm?.total_duration_seconds != null && sm.total_duration_seconds > 0
+                  ? (sm.filler_count / (sm.total_duration_seconds / 60)).toFixed(1)
+                  : sm?.filler_count != null
+                    ? String(sm.filler_count)
+                    : null;
+              const wpm = sm?.speaking_rate_wpm != null ? Math.round(sm.speaking_rate_wpm) : null;
+              const metricsItems: [string, string, string][] = [
+                [
+                  "Pace",
+                  wpm != null ? `${wpm} wpm` : "—",
+                  wpm != null
+                    ? wpm > 180
+                      ? "Slightly fast – aim for 120–150 wpm"
+                      : wpm < 110
+                        ? "Slightly slow – aim for 120–150 wpm"
+                        : "Pace is in the ideal range (120–150 wpm)"
+                    : "Complete a session to see your pace",
+                ],
+                [
+                  "Clarity",
+                  sscore != null ? `${sscore.toFixed(1)}%` : "—",
+                  "Based on vocabulary, sentence length, and flow",
+                ],
+                [
+                  "Filler words",
+                  fillerPerMin != null ? `${fillerPerMin}/min` : "—",
+                  sm?.filler_rate != null
+                    ? sm.filler_rate > 0.05
+                      ? "High – replace fillers with brief pauses"
+                      : "Low filler usage – well done"
+                    : "Complete a session to see filler data",
+                ],
+                [
+                  "Confidence",
+                  vscore != null ? `${vscore.toFixed(1)}%` : "—",
+                  "Based on eye contact and facial presence",
+                ],
+              ];
+              return (
+                <div className="space-y-3">
+                  {metricsItems.map(([label, value, note]) => (
+                    <div key={label} className="theme-panel-soft rounded-2xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="theme-text-dim text-xs uppercase tracking-[0.08em]">{label}</p>
+                        <p className="theme-text-primary text-2xl font-bold">{value}</p>
                       </div>
-                    )}
-                    <p className="theme-text-secondary mt-3 text-xs leading-[1.55]">{note}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+                      {value.endsWith("%") && (
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--bg3)]">
+                          <div
+                            className="h-full rounded-full bg-[var(--accent)]"
+                            style={{ width: value }}
+                          />
+                        </div>
+                      )}
+                      <p className="theme-text-secondary mt-3 text-xs leading-[1.55]">{note}</p>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </aside>
       </main>

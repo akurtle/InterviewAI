@@ -125,7 +125,6 @@ export default function QuestionGenerator({
 
   const sessionStartRef = useRef<number | null>(null);
   const questionStartRef = useRef<number | null>(null);
-  const transcriptStartIndexRef = useRef<number>(0);
   const startSignalRef = useRef<number | null>(null);
   const contextPresets = useMemo(() => getPresetsForSession(sessionType), [sessionType]);
   const currentPreset =
@@ -265,8 +264,7 @@ export default function QuestionGenerator({
   };
 
   const transcriptSlice = (transcripts ?? [])
-    .slice(transcriptStartIndexRef.current)
-    .filter((item) => item.isFinal);
+    .filter((item) => item.isFinal && item.questionIndex === currentIndex);
   const currentAnswerText = transcriptSlice.map((item) => item.text).join(" ").trim();
 
   const totalElapsedMs =
@@ -312,7 +310,6 @@ export default function QuestionGenerator({
     setNowMs(null);
     sessionStartRef.current = null;
     questionStartRef.current = null;
-    transcriptStartIndexRef.current = 0;
   };
 
   const requestQuestions = async (
@@ -375,7 +372,6 @@ export default function QuestionGenerator({
     setAnswers([]);
     sessionStartRef.current = Date.now();
     questionStartRef.current = Date.now();
-    transcriptStartIndexRef.current = (transcripts ?? []).length;
   };
 
   const goToNextQuestion = async () => {
@@ -403,12 +399,10 @@ export default function QuestionGenerator({
 
       setCurrentIndex(nextIndex);
       questionStartRef.current = Date.now();
-      transcriptStartIndexRef.current = (transcripts ?? []).length;
       return;
     }
     setCurrentIndex(nextIndex);
     questionStartRef.current = Date.now();
-    transcriptStartIndexRef.current = (transcripts ?? []).length;
   };
 
   const endInterview = () => {
@@ -480,7 +474,6 @@ export default function QuestionGenerator({
         setNowMs(null);
         sessionStartRef.current = null;
         questionStartRef.current = null;
-        transcriptStartIndexRef.current = 0;
         onCurrentQuestionChange?.(null, 0, 0);
         return next;
       }
@@ -501,7 +494,6 @@ export default function QuestionGenerator({
         const nextIndex = Math.min(currentIndex, next.length - 1);
         setCurrentIndex(nextIndex);
         questionStartRef.current = Date.now();
-        transcriptStartIndexRef.current = (transcripts ?? []).length;
         if (interviewStatus === "running" && nextIndex >= next.length) {
           endInterview();
         }

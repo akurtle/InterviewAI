@@ -198,7 +198,6 @@ def generate_questions(request: QuestionRequest) -> Tuple[List[QuestionItem], Li
             request=request,
             api_key=api_key,
             model=settings.gemini_model,
-            api_url=settings.gemini_api_url,
         )
         warnings.extend(llm_warnings)
         if llm_questions:
@@ -223,12 +222,9 @@ def _generate_questions_with_gemini(
     request: QuestionRequest,
     api_key: str,
     model: str,
-    api_url: str,
 ) -> Tuple[List[QuestionItem], List[str]]:
     warnings: List[str] = []
-    base_url = api_url or (
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-    )
+    base_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     system_prompt = (
         "You generate interview/sales/presentation questions. "

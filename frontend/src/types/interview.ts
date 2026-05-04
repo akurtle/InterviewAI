@@ -62,6 +62,7 @@ export type TranscriptItem = {
   text: string;
   isFinal: boolean;
   ts: number;
+  questionIndex?: number | null;
 };
 
 export type QuestionAnswerReview = {
